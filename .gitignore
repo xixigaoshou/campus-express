@@ -39,3 +39,20 @@ Thumbs.db
 # ---------- 工具缓存/会话产物（非项目源码）----------
 build-cache/
 .trae-html-share-packages/
+
+# ---------- 历史报告与生成物（不入库，仅保留本地）----------
+# 根目录下多版需求分析报告 PDF/DOCX/PPTX（v4/v5/v6/新版/原版等重复版本）
+/*.pdf
+/*.docx
+/*.pptx
+# 报告生成脚本与中间产物
+/build_docx.py
+/ppt_gen.js
+/report_extract.md
+/package.json
+/package-lock.json
+# 会话期临时验证脚本与生成的报告页
+/regression-test/
+/wallet-test/
+/ws-test/
+/campus-express-implementation-report/
