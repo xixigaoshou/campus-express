@@ -1,5 +1,11 @@
 # 校园快递代取平台（Campus Express）
 
+[![CI](https://github.com/xixigaoshou/campus-express/actions/workflows/ci.yml/badge.svg)](https://github.com/xixigaoshou/campus-express/actions/workflows/ci.yml)
+[![Java](https://img.shields.io/badge/Java-17-007396?logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/17/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
+
 一个前后端分离的校园快递代取平台。需求方发布代取需求并冻结报酬，接单者在大厅抢单、取件、送达，需求方确认收货后报酬自动结算给接单者。围绕这一主线，平台实现了完整的订单状态机、信誉分体系、超时自动处理、转单接力、钱包资金闭环与多层次安全校验。
 
 - 后端：Java 17 + Spring Boot 3.2.5 + MyBatis-Plus + JWT + MySQL 8.0，端口 `8080`
