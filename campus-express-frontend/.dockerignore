@@ -1,0 +1,7 @@
+# 构建上下文排除项：node_modules 与本地产物不送进镜像（容器内 npm ci 重新安装）
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+.git/
+.gitignore

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 站内通知表 Mapper XML（namespace 与 NotificationMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.NotificationMapper">
+
+    <!-- 结果映射：与 t_notification 表字段一致 -->
+    <resultMap id="NotificationMap" type="com.campus.express.entity.Notification">
+        <id column="notification_id" property="notificationId"/>
+        <result column="user_id" property="userId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="content" property="content"/>
+        <result column="is_read" property="isRead"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 用户通知列表：新到旧 -->
+    <select id="selectByUserId" resultMap="NotificationMap">
+        SELECT notification_id, user_id, order_id, content, is_read, create_time
+        FROM t_notification
+        WHERE user_id = #{userId}
+        ORDER BY create_time DESC, notification_id DESC
+    </select>
+
+    <!-- 未读通知数 -->
+    <select id="countUnread" resultType="int">
+        SELECT COUNT(*)
+        FROM t_notification
+        WHERE user_id = #{userId}
+          AND is_read = 0
+    </select>
+
+    <!-- 全部标记已读 -->
+    <update id="markAllRead">
+        UPDATE t_notification
+        SET is_read = 1
+        WHERE user_id = #{userId}
+          AND is_read = 0
+    </update>
+</mapper>

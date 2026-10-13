@@ -1,0 +1,84 @@
+# ============================================================
+# 校园快递代取平台 - 一键启动编排（MySQL 8 + Spring Boot 后端 + Nginx 前端）
+#
+# 启动：docker compose up --build -d
+# 访问：http://localhost:5173          （前端页面）
+#       http://localhost:8080/doc.html （Knife4j 在线 API 文档）
+# 停止：docker compose down            （加 -v 会同时删除数据库数据卷）
+#
+# 说明：MySQL 首次启动会自动执行 docker/mysql-init/ 下的脚本建库建表；
+#       数据卷 mysql-data 已存在时不会再执行，如需重建请先 docker compose down -v。
+# ============================================================
+services:
+
+  # ---------- 数据库 ----------
+  mysql:
+    image: mysql:8.0
+    container_name: campus-express-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: campus_express
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+    # 映射到 13306 而非 3306：避免与本机已安装的 MySQL 抢端口；
+    # 后端在同一 compose 网络内直接用 mysql:3306 连接，无需宿主机端口
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 初始化脚本按文件名顺序执行：基础建表 → 通知表 → 信誉流水 → 头像字段 → 支付密码字段
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ---------- 后端 ----------
+  backend:
+    build: ./campus-express-backend
+    container_name: campus-express-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # 生产 profile：关闭 SQL 标准输出、验证码不回传
+      SPRING_PROFILES_ACTIVE: prod
+      # 覆盖 application.yml 中写死的 localhost，改指向 compose 内的 mysql 服务
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/campus_express?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "123456"
+      # 生产 profile 强制要求注入签名密钥；未提供时用演示默认值，正式部署请通过 .env 覆盖
+      JWT_SECRET: ${JWT_SECRET:-Y2FtcHVzX2V4cHJlc3NfanV0X3NlY3JldF9rZXlfMjAyNl9zdHJpbmdfMTIzNDU2Nzg5MA==}
+      # 演示便利：无真实短信网关，回显注册/找回密码验证码，否则无法完成注册流程。
+      # 正式部署请删除此行并接入短信通道（prod 默认已是 false）
+      BUSINESS_SMS_EXPOSE_CODE: "true"
+      TZ: Asia/Shanghai
+    ports:
+      - "8080:8080"
+    volumes:
+      # 头像/订单照片与日志持久化到命名卷，容器重建不丢数据
+      - backend-uploads:/app/uploads
+      - backend-logs:/app/logs
+
+  # ---------- 前端 ----------
+  frontend:
+    build: ./campus-express-frontend
+    container_name: campus-express-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    # 映射到 5173：与开发环境访问地址保持一致
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql-data:
+  backend-uploads:
+  backend-logs:

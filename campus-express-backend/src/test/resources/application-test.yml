@@ -1,0 +1,21 @@
+# ============================================================
+# 测试环境配置（@ActiveProfiles("test")）
+# 指向独立的 campus_express_test 库，避免污染开发库 campus_express
+# 建库方式：mysql -uroot -p -e "CREATE DATABASE campus_express_test ..."
+#          再用 mysqldump --no-data 克隆 campus_express 的表结构导入
+# ============================================================
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/campus_express_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: "123456"
+
+# 关闭 SQL 标准输出：测试日志保持干净
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  file:
+    name: logs/test-backend.log

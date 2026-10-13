@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 用户表 Mapper XML（namespace 与 UserMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.UserMapper">
+
+    <!-- 结果映射：数据库列名 -> 实体驼峰属性（与 t_user 表字段严格一致） -->
+    <resultMap id="UserMap" type="com.campus.express.entity.User">
+        <id column="user_id" property="userId"/>
+        <result column="student_no" property="studentNo"/>
+        <result column="username" property="username"/>
+        <result column="phone" property="phone"/>
+        <result column="password_hash" property="passwordHash"/>
+        <result column="role" property="role"/>
+        <result column="dorm_area" property="dormArea"/>
+        <result column="credit_score" property="creditScore"/>
+        <result column="status" property="status"/>
+        <result column="can_publish" property="canPublish"/>
+        <result column="avatar" property="avatar"/>
+        <result column="pay_password_hash" property="payPasswordHash"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 登录查询：按学号或手机号（两者均唯一，登录名二选一） -->
+    <select id="selectByLoginName" resultMap="UserMap">
+        SELECT *
+        FROM t_user
+        WHERE student_no = #{loginName}
+           OR phone = #{loginName}
+        LIMIT 1
+    </select>
+
+    <!-- 信誉分更新（R-22/R-23）：score + delta，结果以 [0, maxScore] 区间封顶/封底（与上限对称）。
+         说明：原实现用 WHERE ... AND credit_score + #{delta} >= 0 把「扣分导致为负」变成更新失败，
+         会让信誉分已接近 0 的接单者无法被扣分，进而使定时任务的超时处理整单失败。
+         改为 GREATEST(..., 0) 封底：扣分始终生效（不足时扣到 0），流水按实际变化量记录。 -->
+    <update id="updateCreditScore">
+        UPDATE t_user
+        SET credit_score = GREATEST(LEAST(credit_score + #{delta}, #{maxScore}), 0)
+        WHERE user_id = #{userId}
+    </update>
+</mapper>

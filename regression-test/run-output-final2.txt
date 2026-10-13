@@ -1,0 +1,192 @@
+﻿==== 0. 登录测试账号 & 记录初始状态 ====
+登录 OK：小李/小张/小熊/小孙
+初始状态：小李 余额100/冻结0/信誉100；小张 余额50/信誉120；小熊 余额5/信誉100；小孙 信誉75
+
+==== A. 用户模块（注册/登录/资料/密码/找回/信誉流水）====
+[PASS] A1-注册新账号成功 :: code=200
+[PASS] A2-重复学号注册被拒 :: code=400 msg=该学号已注册，请直接登录
+[PASS] A3-学号登录成功 :: token非空
+[PASS] A4-手机号登录成功 :: token非空
+[PASS] A5-错误密码被拒 :: code=400
+[PASS] A6-无token访问受保护接口返回401 :: code=401 msg=未登录或登录已过期，请重新登录
+[PASS] A7-修改资料成功 :: dorm=B区3栋
+[PASS] A8-原密码错误修改被拒 :: code=400
+[PASS] A9-修改密码成功 :: code=200
+[PASS] A10-新密码可登录且旧密码失效 :: new=True old=400
+[PASS] A11-找回密码手机号不匹配统一提示 :: msg=学号或手机号信息不匹配，无法找回密码
+[PASS] A12-找回密码成功且可登录 :: code=200 login=True
+[PASS] A13-信誉分流水分页 :: total=0
+
+==== B. 订单模块（发布/筛选/抢单/状态机/取消/催单/模板/分页）====
+[PASS] E1-小李充值100备资 :: code=200
+[PASS] B1-发布订单成功并冻结报酬4 :: orderId=63 frozen=4.00 balance=196.00
+[PASS] B2-需求大厅关键词命中 :: hit=1
+[PASS] B2b-无关关键词不命中 :: hit=0
+[PASS] B3-报酬范围过滤命中 :: hit=1
+[PASS] B3b-高报酬范围排除低报酬单 :: hit=0
+[PASS] B4-发布者角色不可抢单 :: code=403 msg=当前账号为发布者角色，不可抢单接单
+[PASS] B5-小张抢单成功进入已接单 :: status=已接单 history=2
+[PASS] B6-已被接单订单重复抢单被拒 :: code=400
+[PASS] B7-状态跨跳(已接单→配送中)被拒 :: code=400 msg=非法状态流转：已接单 → 配送中（禁止跨状态跳转）
+[PASS] B8-非接单者更新状态被拒 :: code=403
+[PASS] B9-更新取件中成功 :: code=200
+[PASS] B10-更新配送中成功 :: code=200
+
+==== C. 消息模块（留言/会话/已读/角标）====
+[PASS] C1-接单者发送留言 :: code=200
+[PASS] C2-发布者回复留言 :: code=200
+[PASS] C3-会话消息分页共2条 :: total=2
+[PASS] C4-非订单参与者查看会话被拒 :: code=403
+[PASS] C5-发布者未读消息>0 :: unread=1
+[PASS] C6-标记已读后未读归零 :: unread=0
+[PASS] C7-会话列表含单A且对方为小张 :: other=小张
+[PASS] B11-发布者催单成功 :: code=200
+[PASS] B12-10分钟内重复催单被拒 :: code=400 msg=10 分钟内已提醒过接单者，请耐心等待
+[PASS] B13-接单者确认送达进入待收货 :: status=待收货
+[PASS] B14-非发布者确认收货被拒 :: code=403
+[PASS] D6-未完成订单不可评价 :: code=400 msg=订单未完成，暂不能评价
+[PASS] B15-发布者确认收货订单已完成 :: status=已完成
+[PASS] B16-结算：发布者冻结扣4接单者入账4 :: liFrozen=0.00 zhangBal=54.00
+[PASS] B16b-生成支出与收入两条结算流水 :: pay=1 income=1
+[PASS] B17-再次发布模板返回包裹信息 :: company=回归测试专线
+[PASS] B17b-非发布者查看模板被拒 :: code=403
+[PASS] B18-发布者修改待接单订单 :: loc=3号楼
+[PASS] B18b-非发布者修改订单被拒 :: code=403
+[PASS] B19-发布者取消待接单订单 :: status=已取消
+[PASS] B19b-取消后冻结解冻返还 :: frozen=0.00
+[PASS] B20-接单者取消已接单订单 :: status=待接单
+[PASS] B20b-接单者被扣5信誉分 :: credit=95
+[FAIL] B20c-接单者已清空退回待接单 :: taker=16
+[PASS] B21-发布者取消退回订单 :: status=已取消
+[PASS] B22-信誉分<80接单被拒 :: code=400 msg=信誉分低于 80，暂不可接单，请先提升信誉分
+[PASS] B23-我的发布分页(历史/进行中) :: history=6 active=2
+[PASS] B24-我的接单分页(历史/进行中) :: history=1 active=1
+
+==== D. 评价模块（互评/信誉分联动/防重复）====
+[PASS] D1-发布者5星好评接单者+1分 :: credit=121
+[PASS] D2-接单者3星差评发布者-2分 :: credit=98
+[PASS] D3-同一订单重复评价被拒 :: code=400
+[PASS] D4-订单双向评价列表2条 :: count=2
+[PASS] D5-小张收到评价分页含该订单 :: count=1
+
+==== E. 钱包模块（充值/流水类型过滤）====
+[PASS] E2-资金流水logType=1仅充值 :: count=4
+[PASS] E3-流水含冻结与解冻记录 :: freeze=True unfreeze=True
+
+==== F. 通知模块（分页/未读/已读/角标）====
+[PASS] F1-小张通知分页有记录 :: total=2
+[PASS] F2-小张存在未读通知 :: unread=2
+[PASS] F2b-通知含催单提醒内容 :: count=1
+[PASS] F3-单条标记已读后未读减少 :: unread=1
+[PASS] F4-全部已读后未读归零 :: unread=0
+[PASS] F5-未读过滤(isRead=0)结果为空 :: total=0
+
+==== G. 定时任务①②③（构造场景，等待扫描）====
+等待定时任务扫描（最多 120 秒，覆盖 2 次扫描验证幂等）...
+[PASS] G1-任务①24h无人接单提醒已发送(幂等1条) :: count=1
+[PASS] G2-任务②自动取消退回待接单 :: status=待接单
+[PASS] G2b-任务②接单者已清空 :: taker=0
+[PASS] G2c-任务②接单者扣5信誉分 :: credit=85
+[PASS] G2d-任务②状态历史写入自动取消 :: history=3
+[PASS] G2e-任务②发布者收到退回通知 :: count=1
+[PASS] G3-任务③自动确认收货订单已完成 :: status=已完成
+[PASS] G3b-任务③接单者报酬+2到账 :: balance=56.00
+[PASS] G4-防御场景结算失败订单仍已完成 :: status=已完成
+[PASS] G4b-防御场景结算未执行(无G收入流水) :: income=0
+
+==== 清理测试数据并恢复初始状态 ====
+已删除测试订单及关联数据（订单ID: 63,64,65,66,67,68,69,70）
+钱包与信誉分已恢复初始状态
+已删除临时注册账号 temp001
+[PASS] 清理-小李钱包已恢复 :: balance=100.00 frozen=0.00
+[PASS] 清理-小张信誉分已恢复 :: credit=120
+
+==== 回归测试汇总 ====
+
+Case                     Result Detail                                
+----                     ------ ------                                
+A1-注册新账号成功               PASS   code=200                              
+A2-重复学号注册被拒              PASS   code=400 msg=该学号已注册，请直接登录             
+A3-学号登录成功                PASS   token非空                               
+A4-手机号登录成功               PASS   token非空                               
+A5-错误密码被拒                PASS   code=400                              
+A6-无token访问受保护接口返回401    PASS   code=401 msg=未登录或登录已过期，请重新登录          
+A7-修改资料成功                PASS   dorm=B区3栋                             
+A8-原密码错误修改被拒             PASS   code=400                              
+A9-修改密码成功                PASS   code=200                              
+A10-新密码可登录且旧密码失效         PASS   new=True old=400                      
+A11-找回密码手机号不匹配统一提示       PASS   msg=学号或手机号信息不匹配，无法找回密码                
+A12-找回密码成功且可登录           PASS   code=200 login=True                   
+A13-信誉分流水分页              PASS   total=0                               
+E1-小李充值100备资             PASS   code=200                              
+B1-发布订单成功并冻结报酬4          PASS   orderId=63 frozen=4.00 balance=196.00 
+B2-需求大厅关键词命中             PASS   hit=1                                 
+B2b-无关关键词不命中             PASS   hit=0                                 
+B3-报酬范围过滤命中              PASS   hit=1                                 
+B3b-高报酬范围排除低报酬单          PASS   hit=0                                 
+B4-发布者角色不可抢单             PASS   code=403 msg=当前账号为发布者角色，不可抢单接单        
+B5-小张抢单成功进入已接单           PASS   status=已接单 history=2                  
+B6-已被接单订单重复抢单被拒          PASS   code=400                              
+B7-状态跨跳(已接单→配送中)被拒       PASS   code=400 msg=非法状态流转：已接单 → 配送中（禁止跨状态跳转）
+B8-非接单者更新状态被拒            PASS   code=403                              
+B9-更新取件中成功               PASS   code=200                              
+B10-更新配送中成功              PASS   code=200                              
+C1-接单者发送留言               PASS   code=200                              
+C2-发布者回复留言               PASS   code=200                              
+C3-会话消息分页共2条             PASS   total=2                               
+C4-非订单参与者查看会话被拒          PASS   code=403                              
+C5-发布者未读消息>0             PASS   unread=1                              
+C6-标记已读后未读归零             PASS   unread=0                              
+C7-会话列表含单A且对方为小张         PASS   other=小张                              
+B11-发布者催单成功              PASS   code=200                              
+B12-10分钟内重复催单被拒          PASS   code=400 msg=10 分钟内已提醒过接单者，请耐心等待      
+B13-接单者确认送达进入待收货         PASS   status=待收货                            
+B14-非发布者确认收货被拒           PASS   code=403                              
+D6-未完成订单不可评价             PASS   code=400 msg=订单未完成，暂不能评价              
+B15-发布者确认收货订单已完成         PASS   status=已完成                            
+B16-结算：发布者冻结扣4接单者入账4     PASS   liFrozen=0.00 zhangBal=54.00          
+B16b-生成支出与收入两条结算流水       PASS   pay=1 income=1                        
+B17-再次发布模板返回包裹信息         PASS   company=回归测试专线                        
+B17b-非发布者查看模板被拒          PASS   code=403                              
+B18-发布者修改待接单订单           PASS   loc=3号楼                               
+B18b-非发布者修改订单被拒          PASS   code=403                              
+B19-发布者取消待接单订单           PASS   status=已取消                            
+B19b-取消后冻结解冻返还           PASS   frozen=0.00                           
+B20-接单者取消已接单订单           PASS   status=待接单                            
+B20b-接单者被扣5信誉分           PASS   credit=95                             
+B20c-接单者已清空退回待接单         FAIL   taker=16                              
+B21-发布者取消退回订单            PASS   status=已取消                            
+B22-信誉分<80接单被拒           PASS   code=400 msg=信誉分低于 80，暂不可接单，请先提升信誉分   
+B23-我的发布分页(历史/进行中)       PASS   history=6 active=2                    
+B24-我的接单分页(历史/进行中)       PASS   history=1 active=1                    
+D1-发布者5星好评接单者+1分         PASS   credit=121                            
+D2-接单者3星差评发布者-2分         PASS   credit=98                             
+D3-同一订单重复评价被拒            PASS   code=400                              
+D4-订单双向评价列表2条            PASS   count=2                               
+D5-小张收到评价分页含该订单          PASS   count=1                               
+E2-资金流水logType=1仅充值      PASS   count=4                               
+E3-流水含冻结与解冻记录            PASS   freeze=True unfreeze=True             
+F1-小张通知分页有记录             PASS   total=2                               
+F2-小张存在未读通知              PASS   unread=2                              
+F2b-通知含催单提醒内容            PASS   count=1                               
+F3-单条标记已读后未读减少           PASS   unread=1                              
+F4-全部已读后未读归零             PASS   unread=0                              
+F5-未读过滤(isRead=0)结果为空    PASS   total=0                               
+G1-任务①24h无人接单提醒已发送(幂等1条) PASS   count=1                               
+G2-任务②自动取消退回待接单          PASS   status=待接单                            
+G2b-任务②接单者已清空            PASS   taker=0                               
+G2c-任务②接单者扣5信誉分          PASS   credit=85                             
+G2d-任务②状态历史写入自动取消        PASS   history=3                             
+G2e-任务②发布者收到退回通知         PASS   count=1                               
+G3-任务③自动确认收货订单已完成        PASS   status=已完成                            
+G3b-任务③接单者报酬+2到账         PASS   balance=56.00                         
+G4-防御场景结算失败订单仍已完成        PASS   status=已完成                            
+G4b-防御场景结算未执行(无G收入流水)    PASS   income=0                              
+清理-小李钱包已恢复               PASS   balance=100.00 frozen=0.00            
+清理-小张信誉分已恢复              PASS   credit=120                            
+
+
+
+总计 79 项断言，PASS 78，FAIL 1
+--- FAIL 明细 ---
+  B20c-接单者已清空退回待接单 :: taker=16

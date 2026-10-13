@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 留言消息表 Mapper XML（namespace 与 MessageMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.MessageMapper">
+
+    <!-- MessageVO 结果映射：留言列 + 发送者昵称列 -->
+    <resultMap id="MessageVOMap" type="com.campus.express.vo.MessageVO">
+        <id column="message_id" property="messageId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="sender_id" property="senderId"/>
+        <result column="receiver_id" property="receiverId"/>
+        <result column="content" property="content"/>
+        <result column="is_read" property="isRead"/>
+        <result column="create_time" property="createTime"/>
+        <result column="sender_name" property="senderName"/>
+    </resultMap>
+
+    <!-- 留言会话查询公共 SQL：JOIN t_user 带出发送者昵称（用户关联查询技术点） -->
+    <sql id="selectMessageWithSender">
+        SELECT m.message_id,
+               m.order_id,
+               m.sender_id,
+               m.receiver_id,
+               m.content,
+               m.is_read,
+               m.create_time,
+               su.username AS sender_name
+        FROM t_message m
+                 LEFT JOIN t_user su ON m.sender_id = su.user_id
+    </sql>
+
+    <!-- 订单留言会话分页：按发送时间升序（前端轮询获取最新留言） -->
+    <select id="selectByOrderPage" resultMap="MessageVOMap">
+        <include refid="selectMessageWithSender"/>
+        WHERE m.order_id = #{orderId}
+        ORDER BY m.create_time ASC, m.message_id ASC
+    </select>
+
+    <!-- 订单留言完整时间线（一次拉取全部） -->
+    <select id="selectAllByOrderId" resultMap="MessageVOMap">
+        <include refid="selectMessageWithSender"/>
+        WHERE m.order_id = #{orderId}
+        ORDER BY m.create_time ASC, m.message_id ASC
+    </select>
+
+    <!-- 未读留言统计：个人订单中心角标 -->
+    <select id="countUnread" resultType="int">
+        SELECT COUNT(*)
+        FROM t_message
+        WHERE receiver_id = #{receiverId}
+          AND is_read = 0
+    </select>
+
+    <!-- 会话列表：当前用户参与的所有订单（发布或接单），聚合对方昵称/未读数/最新消息
+         只返回已有留言的订单；最新消息按 message_id 最大（自增等价于最新） -->
+    <select id="selectConversations" resultType="com.campus.express.vo.ConversationVO">
+        SELECT o.order_id AS orderId,
+               CASE WHEN o.publisher_id = #{userId} THEN tak.username ELSE pub.username END AS otherName,
+               (SELECT COUNT(*)
+                FROM t_message m
+                WHERE m.order_id = o.order_id
+                  AND m.receiver_id = #{userId}
+                  AND m.is_read = 0) AS unreadCount,
+               lm.content AS lastContent,
+               su.username AS lastSenderName,
+               lm.create_time AS lastTime
+        FROM t_order o
+                 LEFT JOIN t_user pub ON o.publisher_id = pub.user_id
+                 LEFT JOIN t_user tak ON o.taker_id = tak.user_id
+                 LEFT JOIN (
+            SELECT m1.order_id, m1.content, m1.create_time, m1.sender_id
+            FROM t_message m1
+                     JOIN (SELECT order_id, MAX(message_id) AS max_id
+                           FROM t_message
+                           GROUP BY order_id) mx
+                          ON m1.message_id = mx.max_id
+        ) lm ON lm.order_id = o.order_id
+                 LEFT JOIN t_user su ON lm.sender_id = su.user_id
+        WHERE (o.publisher_id = #{userId} OR o.taker_id = #{userId})
+          AND o.status != '待接单'
+          AND lm.order_id IS NOT NULL
+        ORDER BY lm.create_time DESC, o.order_id DESC
+    </select>
+</mapper>

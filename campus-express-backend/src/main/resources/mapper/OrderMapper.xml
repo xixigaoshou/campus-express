@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 订单表 Mapper XML（namespace 与 OrderMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.OrderMapper">
+
+    <!-- 订单+用户关联查询公共 SQL 片段：带出发布者/接单者昵称（用户关联查询技术点） -->
+    <sql id="selectOrderWithUser">
+        SELECT o.order_id,
+               o.publisher_id,
+               o.taker_id,
+               o.pickup_code,
+               o.express_company,
+               o.pickup_location,
+               o.deliver_location,
+               o.expect_time,
+               o.remark,
+               o.reward_amount,
+               o.version,
+               o.status,
+               o.create_time,
+               o.update_time,
+               o.confirm_arrival_time,
+               o.cancel_reason,
+               o.pickup_photo,
+               o.deliver_photo,
+               o.transfer_status,
+               o.transfer_reason,
+               pu.username AS publisher_name,
+               tu.username AS taker_name,
+               tu.credit_score AS taker_credit_score
+        FROM t_order o
+                 LEFT JOIN t_user pu ON o.publisher_id = pu.user_id
+                 LEFT JOIN t_user tu ON o.taker_id = tu.user_id
+    </sql>
+
+    <!--
+      公开列表专用 SQL 片段：与 selectOrderWithUser 一致，但**不含 pickup_code**。
+      取件码是取件凭据，需求大厅/接力专区面向全体接单者公开展示，
+      若公开返回取件码，任何人无需接单即可凭码到驿站取走包裹（凭证泄露）。
+    -->
+    <sql id="selectOrderWithUserPublic">
+        SELECT o.order_id,
+               o.publisher_id,
+               o.taker_id,
+               o.express_company,
+               o.pickup_location,
+               o.deliver_location,
+               o.expect_time,
+               o.remark,
+               o.reward_amount,
+               o.version,
+               o.status,
+               o.create_time,
+               o.update_time,
+               o.confirm_arrival_time,
+               o.cancel_reason,
+               o.transfer_status,
+               o.transfer_reason,
+               pu.username AS publisher_name,
+               tu.username AS taker_name,
+               tu.credit_score AS taker_credit_score
+        FROM t_order o
+                 LEFT JOIN t_user pu ON o.publisher_id = pu.user_id
+                 LEFT JOIN t_user tu ON o.taker_id = tu.user_id
+    </sql>
+
+    <!-- OrderVO 结果映射：订单列 + 关联昵称列 -->
+    <resultMap id="OrderVOMap" type="com.campus.express.vo.OrderVO">
+        <id column="order_id" property="orderId"/>
+        <result column="publisher_id" property="publisherId"/>
+        <result column="taker_id" property="takerId"/>
+        <result column="pickup_code" property="pickupCode"/>
+        <result column="express_company" property="expressCompany"/>
+        <result column="pickup_location" property="pickupLocation"/>
+        <result column="deliver_location" property="deliverLocation"/>
+        <result column="expect_time" property="expectTime"/>
+        <result column="remark" property="remark"/>
+        <result column="reward_amount" property="rewardAmount"/>
+        <result column="version" property="version"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+        <result column="confirm_arrival_time" property="confirmArrivalTime"/>
+        <result column="cancel_reason" property="cancelReason"/>
+        <result column="pickup_photo" property="pickupPhoto"/>
+        <result column="deliver_photo" property="deliverPhoto"/>
+        <result column="transfer_status" property="transferStatus"/>
+        <result column="transfer_reason" property="transferReason"/>
+        <result column="publisher_name" property="publisherName"/>
+        <result column="taker_name" property="takerName"/>
+        <result column="taker_credit_score" property="takerCreditScore"/>
+    </resultMap>
+
+    <!--
+      需求大厅分页：仅"待接单"且期望取件时间未过（已过期需求无法再接，不应展示），按发布时间降序
+      面向全体接单者公开：使用不含 pickup_code 的公开片段，且关键词不支持按取件码检索
+      （取件码是取件凭据，公开检索会让人无需接单即可凭码取件）
+    -->
+    <select id="selectHallPage" resultMap="OrderVOMap">
+        <include refid="selectOrderWithUserPublic"/>
+        WHERE o.status = '待接单'
+          AND o.expect_time &gt; NOW()
+        <if test="keyword != null and keyword != ''">
+            AND (o.express_company LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.pickup_location LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.deliver_location LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.remark LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="minReward != null">
+            AND o.reward_amount &gt;= #{minReward}
+        </if>
+        <if test="maxReward != null">
+            AND o.reward_amount &lt;= #{maxReward}
+        </if>
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!--
+      我的发布/我的接单统一分页（3.7）
+      publisherId 与 takerId 二选一（传 publish 侧查发布，否则查接单）
+      statusList 为空：查全部；非空：按"进行中/历史"状态分组过滤
+    -->
+    <select id="selectMyPage" resultMap="OrderVOMap">
+        <include refid="selectOrderWithUser"/>
+        WHERE
+        <choose>
+            <when test="publisherId != null">
+                o.publisher_id = #{publisherId}
+            </when>
+            <otherwise>
+                o.taker_id = #{takerId}
+            </otherwise>
+        </choose>
+        <if test="statusList != null and statusList.size() > 0">
+            AND o.status IN
+            <foreach collection="statusList" item="group" open="(" separator="," close=")">
+                <choose>
+                    <when test="group == '进行中'">'待接单','已接单','取件中','配送中','待收货'</when>
+                    <when test="group == '历史'">'已完成','已取消'</when>
+                    <otherwise>#{group}</otherwise>
+                </choose>
+            </foreach>
+        </if>
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!-- 订单详情：完整信息 + 双方昵称 -->
+    <select id="selectOrderVOById" resultMap="OrderVOMap">
+        <include refid="selectOrderWithUser"/>
+        WHERE o.order_id = #{orderId}
+    </select>
+
+    <!--
+      乐观锁抢单更新（规则 R-6/R-7）
+      更新条件：status='待接单' AND version=客户端携带版本号
+      返回影响行数：1=抢单成功（version 同时 +1）；0=已被他人抢走，抢单失败
+      配合 Service 层 @Transactional 保证状态更新与历史写入原子性
+    -->
+    <update id="optimisticTakeOrder">
+        UPDATE t_order
+        SET taker_id = #{takerId},
+            status   = '已接单',
+            version  = version + 1,
+            update_time = NOW(),
+            cancel_reason = NULL
+        WHERE order_id = #{orderId}
+          AND status = '待接单'
+          AND version = #{version}
+    </update>
+
+    <!--
+      接力专区分页：接力中的订单（transfer_status='待接力' 且仍在已接单/取件中，期望取件时间未过）
+      taker_id 仍为原接单者，故 taker_name 即原接单者昵称；按发起接力时间（update_time）降序
+      面向全体接单者公开：同样使用不含 pickup_code 的公开片段（未接力成功前不可见取件凭据）
+    -->
+    <select id="selectRelayPage" resultMap="OrderVOMap">
+        <include refid="selectOrderWithUserPublic"/>
+        WHERE o.transfer_status = '待接力'
+          AND o.status IN ('已接单', '取件中')
+          AND o.expect_time &gt; NOW()
+        <if test="keyword != null and keyword != ''">
+            AND (o.express_company LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.pickup_location LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.deliver_location LIKE CONCAT('%', #{keyword}, '%')
+                 OR o.remark LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="minReward != null">
+            AND o.reward_amount &gt;= #{minReward}
+        </if>
+        <if test="maxReward != null">
+            AND o.reward_amount &lt;= #{maxReward}
+        </if>
+        ORDER BY o.update_time DESC
+    </select>
+
+    <!--
+      接力接单（乐观锁）：换接单者 + 清空接力标记
+      更新条件：transfer_status='待接力' AND taker_id=原接单者 AND version=读取时版本号
+                AND status IN ('已接单','取件中') AND expect_time > NOW()（状态/时间守卫，防并发时序绕过）
+      影响行数 0 = 已被他人接力或已不满足接力条件，接力失败；成功则 version +1
+    -->
+    <update id="relayTakeOrder">
+        UPDATE t_order
+        SET taker_id = #{takerId},
+            transfer_status = NULL,
+            transfer_reason = NULL,
+            version = version + 1,
+            update_time = NOW()
+        WHERE order_id = #{orderId}
+          AND transfer_status = '待接力'
+          AND taker_id = #{oldTakerId}
+          AND version = #{version}
+          AND status IN ('已接单', '取件中')
+          AND expect_time &gt; NOW()
+    </update>
+
+    <!-- 累计收入：接单者指定状态订单报酬合计（无记录返回 0，个人中心统计口径） -->
+    <select id="sumRewardByTaker" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(reward_amount), 0)
+        FROM t_order
+        WHERE taker_id = #{takerId}
+          AND status = #{status}
+    </select>
+
+    <!-- 累计支出：发布者指定状态订单报酬合计（无记录返回 0，个人中心统计口径） -->
+    <select id="sumRewardByPublisher" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(reward_amount), 0)
+        FROM t_order
+        WHERE publisher_id = #{publisherId}
+          AND status = #{status}
+    </select>
+
+    <!-- 待评价数：我参与（发布或接单）的已完成订单中，我尚未评价的数量 -->
+    <select id="countPendingEvaluation" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM t_order o
+        WHERE o.status = '已完成'
+          AND (o.publisher_id = #{userId} OR o.taker_id = #{userId})
+          AND NOT EXISTS (
+              SELECT 1 FROM t_evaluation e
+              WHERE e.order_id = o.order_id AND e.evaluator_id = #{userId}
+          )
+    </select>
+</mapper>

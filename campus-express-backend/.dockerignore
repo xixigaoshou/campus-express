@@ -1,0 +1,10 @@
+# 构建上下文排除项：只把 pom.xml 与 src 送进镜像，缩小上下文、避免脏缓存
+target/
+logs/
+uploads/
+.idea/
+*.iml
+docs/
+maven-settings-local.xml
+.git/
+.gitignore

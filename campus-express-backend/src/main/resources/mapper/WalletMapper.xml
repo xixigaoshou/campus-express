@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 钱包表 Mapper XML（namespace 与 WalletMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.WalletMapper">
+
+    <!-- 冻结报酬（R-26）：扣可用余额、增冻结余额；条件 balance >= amount，余额不足返回 0 -->
+    <update id="freeze">
+        UPDATE t_wallet
+        SET balance        = balance - #{amount},
+            frozen_balance = frozen_balance + #{amount}
+        WHERE user_id = #{userId}
+          AND balance >= #{amount}
+    </update>
+
+    <!-- 解冻退回（R-27）：扣冻结余额、返还可用余额；条件 frozen_balance >= amount -->
+    <update id="unfreeze">
+        UPDATE t_wallet
+        SET frozen_balance = frozen_balance - #{amount},
+            balance        = balance + #{amount}
+        WHERE user_id = #{userId}
+          AND frozen_balance >= #{amount}
+    </update>
+
+    <!-- 结算扣减发布者冻结（R-28 前半） -->
+    <update id="settlePayFrozen">
+        UPDATE t_wallet
+        SET frozen_balance = frozen_balance - #{amount}
+        WHERE user_id = #{userId}
+          AND frozen_balance >= #{amount}
+    </update>
+
+    <!-- 结算入账接单者可用余额（R-28 后半） -->
+    <update id="settleIncome">
+        UPDATE t_wallet
+        SET balance = balance + #{amount}
+        WHERE user_id = #{userId}
+    </update>
+
+    <!-- 模拟充值：可用余额增加（无真实支付） -->
+    <update id="recharge">
+        UPDATE t_wallet
+        SET balance = balance + #{amount}
+        WHERE user_id = #{userId}
+    </update>
+
+    <!-- 提现（模拟）：可用余额减少；条件 balance >= amount，余额不足返回 0 -->
+    <update id="withdraw">
+        UPDATE t_wallet
+        SET balance = balance - #{amount}
+        WHERE user_id = #{userId}
+          AND balance >= #{amount}
+    </update>
+</mapper>

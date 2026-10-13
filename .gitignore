@@ -1,0 +1,41 @@
+# ---------- 后端构建产物 ----------
+target/
+*.class
+
+# ---------- 前端依赖与产物 ----------
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-error.log*
+
+# ---------- 运行时数据（头像/订单照片、日志）----------
+# 应用启动时会自动 mkdirs() 创建 uploads/avatar 与 uploads/order，无需入库
+uploads/
+logs/
+*.log
+
+# ---------- 环境与密钥 ----------
+.env
+.env.local
+.env.*.local
+
+# ---------- IDE ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+
+# ---------- 临时文件 ----------
+*.tmp
+*.bak
+
+# ---------- 工具缓存/会话产物（非项目源码）----------
+build-cache/
+.trae-html-share-packages/

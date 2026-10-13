@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 评价记录表 Mapper XML（namespace 与 EvaluationMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.EvaluationMapper">
+
+    <!-- EvaluationVO 结果映射：评价列 + 双方昵称列 -->
+    <resultMap id="EvaluationVOMap" type="com.campus.express.vo.EvaluationVO">
+        <id column="evaluation_id" property="evaluationId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="evaluator_id" property="evaluatorId"/>
+        <result column="evaluatee_id" property="evaluateeId"/>
+        <result column="star_level" property="starLevel"/>
+        <result column="content" property="content"/>
+        <result column="create_time" property="createTime"/>
+        <result column="evaluator_name" property="evaluatorName"/>
+        <result column="evaluatee_name" property="evaluateeName"/>
+        <result column="express_company" property="expressCompany"/>
+        <result column="pickup_code" property="pickupCode"/>
+        <result column="reward_amount" property="rewardAmount"/>
+    </resultMap>
+
+    <!-- 评价实体结果映射（无关联查询用） -->
+    <resultMap id="EvaluationMap" type="com.campus.express.entity.Evaluation">
+        <id column="evaluation_id" property="evaluationId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="evaluator_id" property="evaluatorId"/>
+        <result column="evaluatee_id" property="evaluateeId"/>
+        <result column="star_level" property="starLevel"/>
+        <result column="content" property="content"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 订单评价列表：JOIN t_user 关联双方昵称，订单详情页展示 -->
+    <select id="selectByOrderId" resultMap="EvaluationVOMap">
+        SELECT e.evaluation_id,
+               e.order_id,
+               e.evaluator_id,
+               e.evaluatee_id,
+               e.star_level,
+               e.content,
+               e.create_time,
+               ev.username AS evaluator_name,
+               ee.username AS evaluatee_name
+        FROM t_evaluation e
+                 LEFT JOIN t_user ev ON e.evaluator_id = ev.user_id
+                 LEFT JOIN t_user ee ON e.evaluatee_id = ee.user_id
+        WHERE e.order_id = #{orderId}
+        ORDER BY e.create_time ASC
+    </select>
+
+    <!-- 查某订单中某评价者的评价：避免重复评价（规则 R-21） -->
+    <select id="selectByOrderAndEvaluator" resultMap="EvaluationMap">
+        SELECT evaluation_id, order_id, evaluator_id, evaluatee_id, star_level, content, create_time
+        FROM t_evaluation
+        WHERE order_id = #{orderId}
+          AND evaluator_id = #{evaluatorId}
+        LIMIT 1
+    </select>
+
+    <!-- 某用户收到的评价分页：关联双方昵称 + 订单摘要（快递公司/取件码/报酬），评价记录列表页展示 -->
+    <select id="selectPageByEvaluatee" resultMap="EvaluationVOMap">
+        SELECT e.evaluation_id,
+               e.order_id,
+               e.evaluator_id,
+               e.evaluatee_id,
+               e.star_level,
+               e.content,
+               e.create_time,
+               ev.username AS evaluator_name,
+               ee.username AS evaluatee_name,
+               o.express_company,
+               o.pickup_code,
+               o.reward_amount
+        FROM t_evaluation e
+                 LEFT JOIN t_user ev ON e.evaluator_id = ev.user_id
+                 LEFT JOIN t_user ee ON e.evaluatee_id = ee.user_id
+                 LEFT JOIN t_order o ON e.order_id = o.order_id
+        WHERE e.evaluatee_id = #{evaluateeId}
+        ORDER BY e.create_time DESC
+    </select>
+</mapper>

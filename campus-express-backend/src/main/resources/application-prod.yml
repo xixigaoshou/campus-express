@@ -1,0 +1,18 @@
+# ============================================================
+# 生产环境覆盖配置
+# 启动方式：java -jar xxx.jar --spring.profiles.active=prod
+# 仅覆盖需要与开发环境区分的安全相关配置，其余沿用 application.yml
+# ============================================================
+jwt:
+  # 生产环境必须通过环境变量 JWT_SECRET 注入独立签名密钥（不提供默认值，缺失时启动即失败，杜绝沿用开发密钥）
+  secret: ${JWT_SECRET}
+
+mybatis-plus:
+  configuration:
+    # 关闭 SQL 标准输出：避免含手机号、密码哈希等敏感数据的 SQL 打印到控制台/日志
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+business:
+  sms:
+    # 关闭演示开关：验证码不再随接口响应回传，正式环境须接入真实短信网关
+    expose-code: false

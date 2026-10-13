@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 订单状态历史表 Mapper XML（namespace 与 OrderStatusHistoryMapper 接口全限定名一致） -->
+<mapper namespace="com.campus.express.mapper.OrderStatusHistoryMapper">
+
+    <!-- 结果映射：与 t_order_status_history 表字段严格一致 -->
+    <resultMap id="HistoryMap" type="com.campus.express.entity.OrderStatusHistory">
+        <id column="history_id" property="historyId"/>
+        <result column="order_id" property="orderId"/>
+        <result column="from_status" property="fromStatus"/>
+        <result column="to_status" property="toStatus"/>
+        <result column="operator_id" property="operatorId"/>
+        <result column="change_note" property="changeNote"/>
+        <result column="change_time" property="changeTime"/>
+    </resultMap>
+
+    <!--
+      批量插入状态变更记录（规则 R-4）
+      配合 Service 事务：状态变更 + 历史写入原子完成
+    -->
+    <insert id="batchInsert">
+        INSERT INTO t_order_status_history
+            (order_id, from_status, to_status, operator_id, change_note, change_time)
+        VALUES
+        <foreach collection="list" item="h" separator=",">
+            (#{h.orderId}, #{h.fromStatus}, #{h.toStatus}, #{h.operatorId}, #{h.changeNote}, #{h.changeTime})
+        </foreach>
+    </insert>
+
+    <!-- 订单完整状态流转轨迹：按变更时间升序，订单详情页时间线展示 -->
+    <select id="selectByOrderId" resultMap="HistoryMap">
+        SELECT history_id, order_id, from_status, to_status, operator_id, change_note, change_time
+        FROM t_order_status_history
+        WHERE order_id = #{orderId}
+        ORDER BY change_time ASC, history_id ASC
+    </select>
+</mapper>

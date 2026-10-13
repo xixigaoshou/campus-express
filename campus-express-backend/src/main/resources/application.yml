@@ -1,0 +1,125 @@
+# ============================================================
+# 校园快递代取平台 - 后端配置文件
+# Spring Boot 3.2 / MyBatis-Plus / MySQL 8.0
+# ============================================================
+
+server:
+  port: 8080
+  # 接口统一前缀 /api 由各 Controller 的 @RequestMapping 提供，此处不再配置 context-path，
+  # 避免出现 /api/api 双重前缀（前端 Vite 代理 /api -> localhost:8080 直接命中）
+
+spring:
+  application:
+    name: campus-express-backend
+  # 数据源：连接本机 MySQL（库已由 schema_nobom.sql 建好）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/campus_express?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: "123456"
+    hikari:
+      maximum-pool-size: 10      # 连接池上限
+      minimum-idle: 2
+      connection-timeout: 30000
+  # 上传大小限制（留言无附件，仅作兜底）
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+# Jackson：时间序列化格式统一
+jackson:
+  date-format: yyyy-MM-dd HH:mm:ss
+  time-zone: Asia/Shanghai
+
+# 日志：同时输出到文件（便于排查运行时异常，IDEA 控制台仍同步打印）
+logging:
+  file:
+    name: logs/backend.log
+
+# ============================================================
+# MyBatis-Plus 配置
+# ============================================================
+mybatis-plus:
+  # Mapper XML 映射文件位置（classpath:mapper/ 下，与接口同名同包结构）
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true   # 数据库下划线列名 -> 实体驼峰属性
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl   # 开发期打印 SQL
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto                      # 主键自增
+      logic-delete-field: none           # 不使用逻辑删除（报告未要求）
+
+# ============================================================
+# JWT 配置（登录会话）
+# ============================================================
+jwt:
+  # 签名密钥：Base64 编码的 256 位密钥。
+  # 优先读取环境变量 JWT_SECRET（生产环境务必注入独立密钥），未设置时回退到下方开发默认值。
+  secret: ${JWT_SECRET:Y2FtcHVzX2V4cHJlc3NfanV0X3NlY3JldF9rZXlfMjAyNl9zdHJpbmdfMTIzNDU2Nzg5MA==}
+  # 令牌有效期：7 天（毫秒）
+  expire-minutes: 10080
+  # 请求头名称
+  header: Authorization
+  # 令牌前缀（前端携带：Authorization: Bearer <token>）
+  prefix: "Bearer "
+
+# ============================================================
+# 业务规则参数（对应需求报告第 6 章，规则编号 R-x）
+# 统一在此配置，业务调整无需改代码（对应 4.5 可维护性需求）
+# ============================================================
+business:
+  # ---- 信誉分规则（R-21 ~ R-24）----
+  credit:
+    init-score: 100            # 初始信誉分
+    max-score: 150             # 信誉分上限：达到后好评不再加分
+    good-star: 4               # 星级 >=4 视为好评：信誉分 +1
+    good-add: 1
+    bad-star: 3                # 星级 <=3 视为差评：信誉分 -2
+    bad-deduct: 2
+    breach-deduct: 5           # 接单者违约（接单后取消 / 超时未取件 / 取件后超时未送达）：信誉分 -5
+    ban-threshold: 80          # 信誉分低于 80 禁止接单（R-23）
+    # 信誉等级区间（R-24）：普通 80-99 / 良好 100-119 / 优秀 120+
+    level-normal-min: 80
+    level-good-min: 100
+    level-excellent-min: 120
+  # ---- 同时进行中订单上限（R-9，按信誉等级）----
+  concurrent-order-limit:
+    normal: 2        # 普通：同时可接 2 单
+    good: 3          # 良好：同时可接 3 单
+    excellent: 5     # 优秀：同时可接 5 单
+  # ---- 超时规则（R-14 ~ R-16）----
+  timeout:
+    wait-accept-hours: 24         # 发布后 24h 无人接单：提醒发布者（R-14）
+    pickup-overdue-minutes: 30    # 超过期望取件时间 30 分钟仍未取件：自动取消并退回待接单（R-15）
+    picking-overdue-hours: 6      # 取件中/配送中超过期望取件时间 6 小时仍未送达：自动取消并扣信誉分
+    confirm-receipt-hours: 24     # 确认送达后 24h 未确认收货：系统自动确认收货（R-16）
+  # ---- 报酬规则（R-17）----
+  reward:
+    min: 2.0
+    max: 50.0
+  # ---- 评价有效期（R-21）----
+  evaluation:
+    valid-days: 7              # 订单完成后 7 天内可评价
+  # ---- 转单接力规则 ----
+  relay:
+    timeout-minutes: 30        # 发起接力后 30 分钟无人接力：自动撤回，原接单者继续履约
+    min-credit: 90             # 转单接力权限门槛：信誉分低于该值不可发起转单
+    weekly-limit: 3            # 每人每周最多发起转单接力次数（自然周，周一 00:00 重置）
+  # ---- 发布者取消频控（反刷单）----
+  cancel:
+    daily-limit: 3             # 每个自然日最多取消待接单订单 3 次，达上限后当日禁止再发布
+  # ---- 找回密码安全策略（免登录流程）----
+  password-reset:
+    token-minutes: 10          # 身份验证通过后签发的一次性重置令牌有效期（分钟）
+    max-attempts: 5            # 同一账号在时间窗内允许的身份验证尝试次数
+    attempt-window-minutes: 15 # 尝试次数统计时间窗（分钟）
+  # ---- 注册短信验证码策略（手机号真实性校验）----
+  sms:
+    code-minutes: 5            # 验证码有效期（分钟）
+    resend-seconds: 60         # 同一手机号两次发送的最小间隔（秒），防刷
+    daily-limit: 10            # 同一手机号每个自然日最多发送次数
+    max-verify-attempts: 5     # 同一手机号验证码最多校验失败次数（超过作废，需重新获取）
+    expose-code: true          # 演示开关：true 时发送接口回传验证码（无真实短信网关）；生产环境应置 false
