@@ -5,6 +5,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 一个前后端分离的校园快递代取平台。需求方发布代取需求并冻结报酬，接单者在大厅抢单、取件、送达，需求方确认收货后报酬自动结算给接单者。围绕这一主线，平台实现了完整的订单状态机、信誉分体系、超时自动处理、转单接力、钱包资金闭环与多层次安全校验。
 
@@ -33,7 +34,49 @@
 
 ---
 
-## 二、目录结构
+## 二、界面预览
+
+> 截图取自本地运行环境（前端 `5173` / 后端 `8080`），演示账号见第八节。
+
+### 登录 / 注册
+
+<img src="screenshots/01-login.jpg" width="860" alt="登录 / 注册页">
+
+校园蓝 + 快递橙主题：左侧品牌区展示标语与特性点，右侧为毛玻璃登录卡片，支持登录 / 注册切换与找回密码。
+
+### 发布者视角（`can_publish = true`）
+
+| 我的订单 · 我的发布 | 发布代取需求 |
+| --- | --- |
+| <img src="screenshots/02-publisher-my-orders.png" width="410" alt="我的订单"> | <img src="screenshots/03-publish-order.png" width="410" alt="发布代取需求"> |
+
+| 订单详情 · 状态变更轨迹 | 个人中心 · 统计与信誉规则 |
+| --- | --- |
+| <img src="screenshots/10-order-detail-publisher.png" width="410" alt="订单详情"> | <img src="screenshots/04-publisher-profile.png" width="410" alt="个人中心"> |
+
+| 通知中心 | 消息会话 |
+| --- | --- |
+| <img src="screenshots/11-notification-center.png" width="410" alt="通知中心"> | <img src="screenshots/12-message-center.png" width="410" alt="消息会话"> |
+
+### 接单者视角（`can_publish = false`）
+
+| 需求大厅 | 接力专区 |
+| --- | --- |
+| <img src="screenshots/05-demand-hall.png" width="410" alt="需求大厅"> | <img src="screenshots/06-relay-hall.png" width="410" alt="接力专区"> |
+
+| 订单详情 · 取件 / 转单 / 留言 | 我的订单 · 我的接单 |
+| --- | --- |
+| <img src="screenshots/07-order-detail-taker.png" width="410" alt="订单详情"> | <img src="screenshots/08-taker-my-orders.png" width="410" alt="我的订单"> |
+
+### 钱包资金流水
+
+<img src="screenshots/09-wallet-logs.png" width="860" alt="资金流水">
+
+充值、提现、结算收入均按流水记录（含变化前 / 后余额与关联订单），资金闭环可追溯。
+
+---
+
+## 三、目录结构
 
 ```
 6ab0ed45647a63983f854f91/
@@ -60,7 +103,7 @@
 │   │   ├── application.yml          # 主配置（数据源、JWT、业务规则参数）
 │   │   ├── application-prod.yml     # 生产环境覆盖配置
 │   │   └── mapper/*.xml             # MyBatis SQL 映射
-│   ├── src/test/java/.../           # 单元测试 + 集成测试 + 并发压测（28 个测试类 / 261 用例）
+│   ├── src/test/java/.../           # 单元测试 + 集成测试 + 并发压测（29 个测试类 / 268 用例）
 │   │   ├── service/impl/            # Service 层单元测试（Mockito）
 │   │   └── integration/             # MockMvc 主链路集成测试、HTTP 级并发压测
 │   ├── docs/
@@ -86,13 +129,16 @@
 ├── docker-compose.yml               # 一键启动 MySQL + 后端 + 前端
 ├── docker/mysql-init/               # MySQL 容器首次启动自动执行的建库建表脚本
 ├── .github/workflows/ci.yml         # CI：跑测试 + 覆盖率 + 前端构建 + 镜像构建校验
-├── project_init/                    # 数据库脚本、接口文档、测试用例、部署说明
+├── screenshots/                     # 界面预览截图（见「二、界面预览」）
+├── project_init/
+│   ├── sql/                         # 数据库脚本（schema.sql + 各增量脚本，UTF-8 无 BOM）
+│   └── docs/                        # 项目概览、接口文档、测试用例、部署说明
 └── README.md
 ```
 
 ---
 
-## 三、环境要求
+## 四、环境要求
 
 | 组件 | 版本要求 |
 | --- | --- |
@@ -105,36 +151,36 @@
 
 ---
 
-## 四、快速开始
+## 五、快速开始
 
 ### 步骤 1：初始化数据库
 
 1. 确认本机 MySQL 8.0 已启动。
-2. 按**顺序**执行 `project_init/` 下的脚本（全新安装推荐顺序见下表）。
+2. 按**顺序**执行 `project_init/sql/` 下的脚本（全新安装推荐顺序见下表）。
 
 **全新数据库推荐执行顺序**
 
 | 顺序 | 脚本 | 作用 |
 | --- | --- | --- |
-| 1 | `schema_nobom.sql` | 建库 + 核心表（t_user / t_order / t_order_status_history / t_order_transfer / t_message / t_evaluation / t_wallet / t_wallet_log）+ 索引约束 + 演示数据 |
-| 2 | `02_notification_nobom.sql` | 站内通知表 `t_notification` |
+| 1 | `schema.sql` | 建库 + 核心表（t_user / t_order / t_order_status_history / t_order_transfer / t_message / t_evaluation / t_wallet / t_wallet_log）+ 索引约束 + 演示数据 |
+| 2 | `02_站内通知表.sql` | 站内通知表 `t_notification` |
 | 3 | `06_信誉分明细表.sql` | 信誉分流水表 `t_credit_log` |
 | 4 | `07_用户头像字段.sql` | `t_user.avatar` 头像字段 |
 | 5 | `11_支付密码字段.sql` | `t_user.pay_password_hash` 支付密码字段 |
 
-> 说明：`03_待收货状态升级.sql`、`04_角色发布权限.sql`、`08_转单接力.sql`、`09_取件码字段.sql`、`10_角色权限同步.sql` 的内容**已合并进 `schema_nobom.sql`**，全新安装无需单独执行；仅当从旧版本数据库升级时才需要按序号增量执行。
+> 说明：`03_待收货状态升级.sql`、`04_角色发布权限.sql`、`08_转单接力.sql`、`09_取件码字段.sql`、`10_角色权限同步.sql`、`12_取件码并发唯一.sql` 的内容**已合并进 `schema.sql`**，全新安装无需单独执行；仅当从旧版本数据库升级时才需要按序号增量执行。
 
 命令行执行示例：
 
 ```bash
-mysql -uroot -p < project_init/schema_nobom.sql
-mysql -uroot -p < project_init/02_notification_nobom.sql
-mysql -uroot -p < project_init/06_信誉分明细表.sql
-mysql -uroot -p < project_init/07_用户头像字段.sql
-mysql -uroot -p < project_init/11_支付密码字段.sql
+mysql -uroot -p < project_init/sql/schema.sql
+mysql -uroot -p < project_init/sql/02_站内通知表.sql
+mysql -uroot -p < project_init/sql/06_信誉分明细表.sql
+mysql -uroot -p < project_init/sql/07_用户头像字段.sql
+mysql -uroot -p < project_init/sql/11_支付密码字段.sql
 ```
 
-> `*_nobom.sql` 为去除 UTF-8 BOM 的版本，避免 Windows 下命令行导入时首字符报错；用 Navicat 直接运行同名无后缀版本亦可。
+> 所有 SQL 脚本均为 UTF-8 **无 BOM**，可直接用命令行 `mysql <` 导入，也可用 Navicat 直接运行，不会出现首字符报错。
 
 ### 步骤 2：配置并启动后端
 
@@ -182,7 +228,7 @@ npm run preview   # 本地预览构建产物
 
 ---
 
-## 五、一键 Docker 部署
+## 六、一键 Docker 部署
 
 不装 JDK / Maven / Node / MySQL，只要有 Docker 即可拉起完整环境：
 
@@ -210,16 +256,16 @@ CI（`.github/workflows/ci.yml`）在 push / PR 时执行三个任务：起 MySQ
 
 ---
 
-## 六、测试与质量
+## 七、测试与质量
 
 | 项 | 数据 |
 | --- | --- |
-| 测试类 / 用例数 | 28 个测试类 / **261 个用例**，全绿（0 失败 / 0 错误 / 0 跳过） |
-| 指令覆盖率 | **81.1%** |
+| 测试类 / 用例数 | 29 个测试类 / **268 个用例**，全绿（0 失败 / 0 错误 / 0 跳过） |
+| 指令覆盖率 | **81.2%** |
 | 分支覆盖率 | **73.6%** |
-| 行覆盖率 | **80.9%** |
+| 行覆盖率 | **81.0%** |
 | 抢单压测 | 100 并发 × 5 轮（500 请求），**全程 0 超卖** |
-| 压测吞吐 | QPS **623.22**，平均延迟 138.65 ms，P95 498.35 ms |
+| 压测吞吐 | QPS **526.49**，平均延迟 166.90 ms，P95 609.85 ms |
 
 三类测试的分工：
 
@@ -238,14 +284,14 @@ cd campus-express-backend
 mvn test                       # 跑全量测试并生成 JaCoCo 报告（target/site/jacoco/index.html）
 ```
 
-> 压测与集成测试需要 `campus_express_test` 库（结构由 `project_init/schema_nobom.sql` 等脚本克隆而来，见 `src/test/resources/application-test.yml` 注释）。
+> 压测与集成测试需要 `campus_express_test` 库（结构由 `project_init/sql/schema.sql` 等脚本克隆而来，见 `src/test/resources/application-test.yml` 注释）。
 
 压测报告：[load-test-report.md](campus-express-backend/docs/load-test-report.md) · [load-test-report.html](campus-express-backend/docs/load-test-report.html)
 架构与技术取舍：[docs/architecture.md](campus-express-backend/docs/architecture.md)
 
 ---
 
-## 七、演示账号
+## 八、演示账号
 
 > 初始登录密码统一为 **123456**（BCrypt 加盐哈希存储，库中为密文）；支付密码需登录后在个人中心自行设置。
 
@@ -264,9 +310,9 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 
 ---
 
-## 八、核心业务规则
+## 九、核心业务规则
 
-### 8.1 订单状态机
+### 9.1 订单状态机
 
 ```
 待接单 ──抢单──▶ 已接单 ──取件──▶ 取件中 ──送达途中──▶ 配送中 ──确认送达──▶ 待收货 ──确认收货──▶ 已完成
@@ -277,14 +323,14 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 - 状态不允许跨级跳转；每次变更均写入 `t_order_status_history`（含操作人、说明、时间）。
 - 「确认收货」只能由发布者执行，或由系统在送达 24 小时后自动确认（报酬照常结算）。
 
-### 8.2 信誉分体系（参数在 `application.yml` 的 `business.credit`）
+### 9.2 信誉分体系（参数在 `application.yml` 的 `business.credit`）
 
 - 初始 100，上限 150（SQL 层 `LEAST` 封顶，达上限好评不再加分）。
 - 好评（星级 ≥4）+1，差评（星级 ≤3）−2，违约（接单后取消 / 超时未取件 / 取件后超时未送达）−5。
 - 低于 80 禁止接单；等级：普通 80–99 / 良好 100–119 / 优秀 120+。
 - 每次变更同步写入 `t_credit_log` 流水，可追溯。
 
-### 8.3 超时与定时任务（每 60 秒扫描）
+### 9.3 超时与定时任务（每 60 秒扫描）
 
 | 场景 | 处理 |
 | --- | --- |
@@ -294,20 +340,20 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 | 确认送达后 24h 未确认收货 | 系统自动确认收货并结算（结算异常仅告警，不中断任务） |
 | 待接单但期望取件时间已过 | 自动取消并解冻发布者冻结报酬 |
 
-### 8.4 转单接力（参数在 `business.relay`）
+### 9.4 转单接力（参数在 `business.relay`）
 
 - 接单者在取件前（已接单 / 取件中）可发起转单，订单进入「接力专区」，状态保持不变。
 - 双重门槛：信誉分 ≥ 90 且每人每自然周最多发起 3 次（周一 00:00 重置，含已撤回 / 已过期记录）。
 - 30 分钟无人接力自动撤回，原接单者不扣信誉分；接力抢单采用乐观锁，冲突提示「该订单已被他人接力承接」。
 - 禁止接力自己发起或自己发布的订单。
 
-### 8.5 资金闭环
+### 9.5 资金闭环
 
 - 发布需求即冻结报酬；提高报酬时需校验支付密码并追加冻结。
 - 订单完成结算给接单者；取消 / 超时解冻退回发布者。
 - 钱包支持充值、提现（0.5–100 元），资金操作均需支付密码；结算按订单流水净冻结额补差，避免资金卡在冻结余额。
 
-### 8.6 安全机制
+### 9.6 安全机制
 
 - 密码：登录密码与支付密码均为 BCrypt 加盐哈希，禁止明文存储；支付密码连续错误 5 次锁定 15 分钟。
 - 会话：JWT 无状态令牌（默认 7 天），拦截器统一校验；仅放行注册、登录、找回密码（发送验证码 / 重置）、`/uploads/**` 静态资源与 Knife4j 文档路径（`/doc.html`、`/webjars/**`、`/v3/api-docs/**`），其余接口均需登录。
@@ -318,7 +364,7 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 
 ---
 
-## 九、角色与权限
+## 十、角色与权限
 
 | 角色 | 判定 | 菜单 | 我的订单 | 个人中心统计 |
 | --- | --- | --- | --- | --- |
@@ -330,7 +376,7 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 
 ---
 
-## 十、接口约定
+## 十一、接口约定
 
 - 所有接口统一前缀 `/api`，统一返回 `Result<T>` 结构：
 
@@ -341,11 +387,11 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 - 错误码约定：`200` 成功 / `400` 参数或业务规则拒绝 / `401` 未登录或令牌失效 / `403` 无权限越权 / `500` 系统异常。
 - 请求头携带令牌：`Authorization: Bearer <token>`。
 - 分页统一使用 `pageNum`、`pageSize` 参数。
-- 完整接口清单见 `project_init/04_API接口文档.md`；运行期可直接访问 **http://localhost:8080/doc.html** 在线浏览与调试。
+- 完整接口清单见 `project_init/docs/04_API接口文档.md`；运行期可直接访问 **http://localhost:8080/doc.html** 在线浏览与调试。
 
 ---
 
-## 十一、常见问题排查
+## 十二、常见问题排查
 
 | 现象 | 排查方向 |
 | --- | --- |
@@ -353,7 +399,7 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 | 头像 / 订单照片无法加载（401） | 确认 `/uploads/**` 静态资源路径已在 `WebMvcConfig` 拦截器中放行（img 标签加载不带 token） |
 | 跨域报错 | 开发环境必须走 Vite 代理（`/api` → `localhost:8080`），不要写死后端完整地址 |
 | `Invalid bound statement` | Mapper XML 的 `namespace` / `id` / `@Param` 与接口是否对齐；XML 是否位于 `resources/mapper/`；Maven 重新编译 |
-| `Unknown column 'xxx'` | 对应增量 SQL 未执行（如 `pickup_code`、`pay_password_hash`），按第四节顺序补执行并重启后端 |
+| `Unknown column 'xxx'` | 对应增量 SQL 未执行（如 `pickup_code`、`pay_password_hash`），按第五节顺序补执行并重启后端 |
 | 改动后仍走旧逻辑 | 在 IDEA 中 Build → Rebuild Project 再重启后端（8080），避免增量编译缓存 |
 | 多人抢到同一订单 | 确认抢单走 `optimisticTakeOrder`，条件含 `status='待接单' AND version=#{version}`，且为独立 `@Transactional` 方法 |
 | 数据库连接 500 / 中文乱码 | JDBC 连接串字符编码使用 `UTF-8`，而非 `utf8mb4` |
@@ -361,7 +407,7 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 
 ---
 
-## 十二、生产环境部署
+## 十三、生产环境部署
 
 1. 打包后端可执行 JAR：
 
@@ -379,11 +425,17 @@ mvn test                       # 跑全量测试并生成 JaCoCo 报告（target
 
 ---
 
-## 十三、相关文档
+## 十四、相关文档
 
 | 文档 | 路径 |
 | --- | --- |
-| 项目概览与数据库设计 | `project_init/01_项目概览与数据库设计.md` |
-| API 接口文档 | `project_init/04_API接口文档.md` |
-| 功能测试用例 | `project_init/05_功能测试用例.md` |
-| 部署运行说明 | `project_init/06_部署运行说明.md` |
+| 项目概览与数据库设计 | `project_init/docs/01_项目概览与数据库设计.md` |
+| API 接口文档 | `project_init/docs/04_API接口文档.md` |
+| 功能测试用例 | `project_init/docs/05_功能测试用例.md` |
+| 部署运行说明 | `project_init/docs/06_部署运行说明.md` |
+
+---
+
+## 十五、许可证
+
+本项目基于 [MIT License](LICENSE) 开源。
