@@ -29,6 +29,7 @@ import com.campus.express.vo.OrderVO;
 import com.campus.express.ws.WebSocketSessionManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -76,6 +77,10 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
             OrderStatus.WAIT_CONFIRM, List.of(OrderStatus.COMPLETED)
     );
 
+    /** 取件码唯一性冲突的统一提示：服务层预检与数据库唯一约束兜底共用 */
+    private static final String PICKUP_CODE_DUPLICATE_MESSAGE =
+            "该取件地点下已有相同取件码的进行中订单，请勿重复填写";
+
     /** 发布代取需求（3.3）：校验报酬范围（R-17），初始化 version=0，写首条历史 */
     @Override
     @Transactional
@@ -114,7 +119,12 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
         order.setRewardAmount(dto.getRewardAmount());
         order.setVersion(0);            // 乐观锁版本号初始为 0（R-7）
         order.setStatus(OrderStatus.WAIT_ACCEPT);
-        orderMapper.insert(order);
+        try {
+            orderMapper.insert(order);
+        } catch (DuplicateKeyException e) {
+            // 上面的预检与并发发布之间存在检查窗口，此处由数据库唯一约束 uk_active_pickup 兜底
+            throw new BusinessException(PICKUP_CODE_DUPLICATE_MESSAGE);
+        }
         // R-25/R-26：订单入库后冻结报酬并关联订单号（余额不足抛异常，事务回滚订单创建；资金与订单共用同一事务）
         walletService.freezeBalance(current.getUserId(), order.getOrderId(), dto.getRewardAmount());
 
@@ -171,7 +181,14 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
         // updateById 带乐观锁 version 条件：影响行数 0 表示订单已被并发修改（典型场景：提交修改的同时订单被抢走）。
         // 必须抛异常让事务回滚——否则上面已执行的冻结/解冻调整会照常提交，
         // 造成「报酬未改、冻结额已变」的差额永久卡在冻结余额里无法退回
-        if (orderMapper.updateById(order) == 0) {
+        int updated;
+        try {
+            updated = orderMapper.updateById(order);
+        } catch (DuplicateKeyException e) {
+            // 改后的取件码与并发的另一单撞车，由数据库唯一约束 uk_active_pickup 兜底
+            throw new BusinessException(PICKUP_CODE_DUPLICATE_MESSAGE);
+        }
+        if (updated == 0) {
             throw new BusinessException("订单已被接单或已被修改，请刷新后重试");
         }
     }
@@ -218,7 +235,7 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
             wrapper.ne(Order::getOrderId, excludeOrderId);
         }
         if (orderMapper.selectCount(wrapper) > 0) {
-            throw new BusinessException("该取件地点下已有相同取件码的进行中订单，请勿重复填写");
+            throw new BusinessException(PICKUP_CODE_DUPLICATE_MESSAGE);
         }
     }
 
@@ -624,7 +641,7 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
 
     /** 我的接单分页 */
     @Override
-    public IPage<OrderVO> getMyTakePage(long current, long size, List<String> statusList) {
+    public IPage<OrderVO>   getMyTakePage(long current, long size, List<String> statusList) {
         Integer userId = userService.getCurrentUser().getUserId();
         Page<OrderVO> page = new Page<>(current, size);
         IPage<OrderVO> result = orderMapper.selectMyPage(page, null, userId, statusList);

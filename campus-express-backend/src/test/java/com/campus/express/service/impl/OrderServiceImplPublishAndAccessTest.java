@@ -10,6 +10,7 @@ import com.campus.express.vo.OrderReuseVO;
 import com.campus.express.vo.OrderVO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.math.BigDecimal;
@@ -122,6 +123,20 @@ class OrderServiceImplPublishAndAccessTest extends AbstractOrderServiceTest {
         verify(webSocketSessionManager).broadcast("new_order");
     }
 
+    @Test
+    @DisplayName("发布：并发下预检同时通过、数据库唯一约束拦截 → 转成友好业务异常")
+    void publishTranslatesDbDuplicateKey() {
+        when(orderMapper.selectCount(any())).thenReturn(0L);
+        when(userService.getCurrentUser()).thenReturn(user(1, "发布者", 100, true));
+        when(historyService.countPublisherCancelSince(any(), any())).thenReturn(0L);
+        when(orderMapper.insert(any(Order.class))).thenThrow(new DuplicateKeyException("uk_active_pickup"));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.publishOrder(publishDto(new BigDecimal("5.00"), LocalDateTime.now().plusHours(2))));
+
+        assertTrue(ex.getMessage().contains("相同取件码"), "数据库撞码应转成用户可读的提示");
+    }
+
     // ---------------- updateWaitOrder（⑦） ----------------
 
     @Test
@@ -181,6 +196,20 @@ class OrderServiceImplPublishAndAccessTest extends AbstractOrderServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.updateWaitOrder(updateDto(10, new BigDecimal("8.00"), LocalDateTime.now().plusHours(2))));
         assertTrue(ex.getMessage().contains("已被接单或已被修改"));
+    }
+
+    @Test
+    @DisplayName("修改待接单：改码撞车被数据库唯一约束拦截 → 转成友好业务异常")
+    void updateWaitOrderTranslatesDbDuplicateKey() {
+        when(userService.getCurrentUser()).thenReturn(user(1, "发布者", 100, true));
+        when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.WAIT_ACCEPT, 1, null));
+        when(orderMapper.selectCount(any())).thenReturn(0L);
+        when(orderMapper.updateById(any(Order.class))).thenThrow(new DuplicateKeyException("uk_active_pickup"));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.updateWaitOrder(updateDto(10, new BigDecimal("5.00"), LocalDateTime.now().plusHours(2))));
+
+        assertTrue(ex.getMessage().contains("相同取件码"), "数据库撞码应转成用户可读的提示");
     }
 
     // ---------------- getOrderVOById：越权防护与脱敏（⑥） ----------------

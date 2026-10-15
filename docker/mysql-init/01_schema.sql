@@ -63,10 +63,17 @@ CREATE TABLE t_order (
   deliver_photo       VARCHAR(255) DEFAULT NULL COMMENT '送达照片相对路径（必填凭证，无法拍照可跳过）',
   transfer_status     VARCHAR(10)  DEFAULT NULL COMMENT '转单接力状态：NULL=无 / 待接力',
   transfer_reason     VARCHAR(200) DEFAULT NULL COMMENT '转单原因（接力中展示）',
+  -- 取件码并发唯一（生成列 + 唯一索引）：生成列仅在「非终态」时取值，终态（已完成/已取消）置 NULL，
+  -- MySQL 唯一索引允许多个 NULL，从而实现「进行中唯一、终态自动释放」。迁移脚本见 12_取件码并发唯一.sql
+  active_pickup_key   VARCHAR(140) GENERATED ALWAYS AS (
+                        IF(status IN ('已完成', '已取消'), NULL,
+                           CONCAT(pickup_location, '|', pickup_code))
+                      ) VIRTUAL COMMENT '进行中订单「取件地点|取件码」唯一键，终态置 NULL 释放',
   PRIMARY KEY (order_id),
   KEY idx_publisher (publisher_id),
   KEY idx_taker (taker_id),
   KEY idx_status_time (status, create_time),
+  UNIQUE KEY uk_active_pickup (active_pickup_key),
   CONSTRAINT fk_order_publisher FOREIGN KEY (publisher_id) REFERENCES t_user (user_id),
   CONSTRAINT fk_order_taker FOREIGN KEY (taker_id) REFERENCES t_user (user_id),
   CONSTRAINT chk_order_status CHECK (status IN ('待接单','已接单','取件中','配送中','待收货','已完成','已取消')),
