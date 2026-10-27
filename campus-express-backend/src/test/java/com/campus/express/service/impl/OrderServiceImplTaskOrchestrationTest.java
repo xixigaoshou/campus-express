@@ -43,6 +43,7 @@ class OrderServiceImplTaskOrchestrationTest extends AbstractOrderServiceTest {
         Order o = order(10, OrderStatus.ACCEPTED, 1, 2);
         o.setTransferStatus(TransferStatus.PENDING);
         when(orderMapper.selectList(any())).thenReturn(List.of(o));
+        when(orderMapper.update(any(), any())).thenReturn(1);
 
         service.relayTimeoutTask();
 
@@ -52,6 +53,21 @@ class OrderServiceImplTaskOrchestrationTest extends AbstractOrderServiceTest {
         verify(notificationService).send(eq(2), eq(10), anyString());
         verify(notificationService).send(eq(1), eq(10), anyString());
         verify(webSocketSessionManager).broadcast("new_relay");
+    }
+
+    @Test
+    @DisplayName("接力超时：影响行数为 0（已被接力/撤回）→ 跳过，不写历史、不重复通知")
+    void relayTimeoutSkipsWhenAlreadyHandled() {
+        Order o = order(10, OrderStatus.ACCEPTED, 1, 2);
+        o.setTransferStatus(TransferStatus.PENDING);
+        when(orderMapper.selectList(any())).thenReturn(List.of(o));
+        when(orderMapper.update(any(), any())).thenReturn(0);
+
+        service.relayTimeoutTask();
+
+        verify(transferMapper, never()).update(any(), any());
+        verify(historyService, never()).saveHistoryRecord(any());
+        verify(notificationService, never()).send(any(), any(), anyString());
     }
 
     // ---------------- autoConfirmReceiptTask：待收货超时自动确认 ----------------

@@ -207,6 +207,21 @@ class OrderServiceImplCancelAndTransferTest extends AbstractOrderServiceTest {
     // ---------------- cancelTransfer：撤回转单接力 ----------------
 
     @Test
+    @DisplayName("发起转单：并发下状态守卫失败（订单已被取消/推进）→ 拒绝且不写接力流水")
+    void initiateTransferLosesRace() {
+        when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+        when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.ACCEPTED, 1, 2));
+        when(transferMapper.selectCount(any())).thenReturn(0L);
+        when(orderMapper.update(any(), any())).thenReturn(0);
+
+        assertThrows(BusinessException.class, () -> service.initiateTransfer(10, VALID_REASON));
+
+        verify(transferMapper, never()).insert(any(OrderTransfer.class));
+        verify(historyService, never()).saveHistoryRecord(any());
+        verify(notificationService, never()).send(any(), any(), anyString());
+    }
+
+    @Test
     @DisplayName("撤回转单：非接单者（403）")
     void cancelTransferOnlyTaker() {
         when(userService.getCurrentUser()).thenReturn(user(3, "路人", 100, false));
@@ -366,5 +381,19 @@ class OrderServiceImplCancelAndTransferTest extends AbstractOrderServiceTest {
         verify(notificationService).send(eq(3), eq(10), anyString());
         verify(notificationService).send(eq(1), eq(10), anyString());
         verify(webSocketSessionManager).broadcast("new_relay");
+    }
+
+    @Test
+    @DisplayName("取消-已接单：并发下状态守卫失败（已被定时任务处理）→ 不扣信誉分、不写历史")
+    void cancelAcceptedLosesRace() {
+        when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+        when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.ACCEPTED, 1, 2));
+        when(orderMapper.update(any(), any())).thenReturn(0);
+
+        assertThrows(BusinessException.class, () -> service.cancelOrder(10, VALID_REASON));
+
+        verify(userService, never()).updateCreditScore(any(), anyInt(), anyString(), anyString(), any());
+        verify(historyService, never()).saveHistoryRecord(any());
+        verify(walletService, never()).unfreezeBalance(any(), any(), any());
     }
 }

@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -130,17 +130,19 @@ class OrderServiceImplScheduledTaskTest extends AbstractOrderServiceTest {
     }
 
     @Test
-    @DisplayName("自动确认收货：结算失败不阻塞订单完成（防御约束）")
-    void autoConfirmToleratesSettlementFailure() {
+    @DisplayName("自动确认收货：结算失败 → 抛异常并回滚，绝不提交「已完成但未结算」")
+    void autoConfirmRollsBackOnSettlementFailure() {
         Order o = order(10, OrderStatus.WAIT_CONFIRM, 1, 2);
         when(orderMapper.updateById(any(Order.class))).thenReturn(1);
         doThrow(new BusinessException("冻结余额不足"))
                 .when(walletService).settleOrderReward(any(), any(), any(), any());
 
-        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(timeout, "autoConfirmOneOrder", o));
+        assertThrows(BusinessException.class,
+                () -> ReflectionTestUtils.invokeMethod(timeout, "autoConfirmOneOrder", o));
 
-        assertEquals(OrderStatus.COMPLETED, o.getStatus());
-        verify(notificationService).send(eq(1), eq(10), anyString());
+        // 事务会整体回滚：订单状态回到待收货，且不得发出「已完成/已结算」类通知
+        assertEquals(OrderStatus.WAIT_CONFIRM, o.getStatus());
+        verify(notificationService, never()).send(any(), any(), anyString());
     }
 
     // ---------------- 过期未接单自动取消（cancelExpiredWaitOrders） ----------------
@@ -195,5 +197,53 @@ class OrderServiceImplScheduledTaskTest extends AbstractOrderServiceTest {
         service.timeoutRemindCancelTask();
 
         verify(userService, never()).updateCreditScore(any(), anyInt(), anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("未送达超时：刚取件（取件时间未超时）即使期望时间已过也不取消")
+    void overdueDeliveryIgnoresFreshPickup() {
+        Order fresh = order(10, OrderStatus.PICKING, 1, 2);
+        fresh.setExpectTime(LocalDateTime.now().minusHours(10));
+        fresh.setPickupTime(LocalDateTime.now().minusMinutes(30));
+        // selectList 调用顺序：⓪过期未接单 / ①超时提醒 / ②未取件 / ③未送达
+        when(orderMapper.selectList(any()))
+                .thenReturn(List.of(), List.of(), List.of(), List.of(fresh));
+
+        service.timeoutRemindCancelTask();
+
+        verify(orderMapper, never()).update(any(), any());
+        verify(userService, never()).updateCreditScore(any(), anyInt(), anyString(), anyString(), any());
+        verify(walletService, never()).unfreezeBalance(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("未送达超时：取件时间已超过时限 → 取消并扣信誉分")
+    void overdueDeliveryUsesPickupTime() {
+        Order overdue = order(10, OrderStatus.PICKING, 1, 2);
+        overdue.setExpectTime(LocalDateTime.now().minusHours(1));
+        overdue.setPickupTime(LocalDateTime.now().minusHours(10));
+        when(orderMapper.selectList(any()))
+                .thenReturn(List.of(), List.of(), List.of(), List.of(overdue));
+        when(orderMapper.update(any(), any())).thenReturn(1);
+
+        service.timeoutRemindCancelTask();
+
+        verify(userService).updateCreditScore(eq(2), eq(-5), eq("配送超时"), anyString(), eq(10));
+        verify(walletService).unfreezeBalance(eq(1), eq(10), any());
+    }
+
+    @Test
+    @DisplayName("未送达超时：历史订单无取件时间时退回期望取件时间判断，不误伤")
+    void overdueDeliveryFallsBackToExpectTime() {
+        Order legacy = order(10, OrderStatus.DELIVERING, 1, 2);
+        legacy.setPickupTime(null);
+        legacy.setExpectTime(LocalDateTime.now().minusHours(10));
+        when(orderMapper.selectList(any()))
+                .thenReturn(List.of(), List.of(), List.of(), List.of(legacy));
+        when(orderMapper.update(any(), any())).thenReturn(1);
+
+        service.timeoutRemindCancelTask();
+
+        verify(userService).updateCreditScore(eq(2), eq(-5), eq("配送超时"), anyString(), eq(10));
     }
 }

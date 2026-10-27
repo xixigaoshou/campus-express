@@ -2,6 +2,11 @@ package com.campus.express.service.impl;
 
 import com.campus.express.entity.Order;
 import com.campus.express.entity.OrderStatusHistory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 
@@ -11,7 +16,24 @@ import java.time.LocalDateTime;
  */
 final class OrderDomainSupport {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderDomainSupport.class);
+
     private OrderDomainSupport() {
+    }
+
+    /**
+     * 在独立事务（REQUIRES_NEW）中执行单笔订单的定时处理：
+     * 单笔失败只回滚该单，不影响同批其他订单，也不会让整批任务被一单坏数据永久卡死
+     */
+    static void runPerOrderTx(PlatformTransactionManager txManager, Integer orderId,
+                              String scene, Runnable action) {
+        TransactionTemplate template = new TransactionTemplate(txManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        try {
+            template.executeWithoutResult(status -> action.run());
+        } catch (Exception e) {
+            log.error("[{}] 订单#{} 处理失败，已跳过该单（不影响其余订单）：{}", scene, orderId, e.getMessage(), e);
+        }
     }
 
     /** 构建状态历史记录对象（R-4） */

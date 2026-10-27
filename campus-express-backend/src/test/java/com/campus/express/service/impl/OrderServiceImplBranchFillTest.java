@@ -118,6 +118,7 @@ class OrderServiceImplBranchFillTest extends AbstractOrderServiceTest {
     void cancelAcceptedWhenPicking() {
         when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.PICKING, 1, 2));
         when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+        when(orderMapper.update(any(), any())).thenReturn(1);
 
         service.cancelOrder(10, "临时有事/时间冲突");
 
@@ -288,6 +289,7 @@ class OrderServiceImplBranchFillTest extends AbstractOrderServiceTest {
         when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.PICKING, 1, 2));
         when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
         when(transferMapper.selectCount(any())).thenReturn(0L);
+        when(orderMapper.update(any(), any())).thenReturn(1);
 
         service.initiateTransfer(10, "临时有事/时间冲突");
 
@@ -336,6 +338,7 @@ class OrderServiceImplBranchFillTest extends AbstractOrderServiceTest {
         o.setExpectTime(null);
         when(orderMapper.selectById(10)).thenReturn(o);
         when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+        when(orderMapper.update(any(), any())).thenReturn(1);
 
         service.cancelOrder(10, "临时有事/时间冲突");
 

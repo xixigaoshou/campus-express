@@ -1,6 +1,8 @@
 package com.campus.express.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
@@ -60,14 +62,23 @@ public class Order {
     /** 订单状态：待接单/已接单/取件中/配送中/待收货/已完成/已取消（状态机见规则 R-1 ~ R-5） */
     private String status;
 
-    /** 发布时间 */
+    /** 发布时间（插入时自动填充） */
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
-    /** 最近更新时间 */
+    /**
+     * 最近更新时间（插入/更新时自动填充）。
+     * 必须由 MetaObjectHandler 无条件覆盖：updateById 会把实体里从库里读出的旧值一并 SET 回去，
+     * 而 MySQL 的 ON UPDATE CURRENT_TIMESTAMP 只在未显式赋值时生效，导致更新时间不前进
+     */
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 
     /** 接单者确认送达时间（配送中 → 待收货时记录，24 小时自动确认收货的计时起点） */
     private LocalDateTime confirmArrivalTime;
+
+    /** 接单者确认取件时间（已接单 → 取件中时记录，取件后送达超时的计时起点） */
+    private LocalDateTime pickupTime;
 
     /** 取消原因（发布者取消/接单者取消/超时自动取消），订单重新被接单时清空 */
     private String cancelReason;

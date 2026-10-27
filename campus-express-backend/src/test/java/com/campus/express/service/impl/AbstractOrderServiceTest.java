@@ -92,7 +92,7 @@ abstract class AbstractOrderServiceTest {
         // 构造器参数顺序与 Lombok @RequiredArgsConstructor 生成的 final 字段顺序一致；
         // 三个领域服务共用同一批 Mock 协作者，门面再委派给它们，保证 mock 交互与拆分前一致
         relay = new OrderRelayServiceImpl(orderMapper, transferMapper, userService,
-                historyService, notificationService, webSocketSessionManager, rules);
+                historyService, notificationService, webSocketSessionManager, rules, transactionManager);
         timeout = new OrderTimeoutServiceImpl(orderMapper, userService, historyService,
                 notificationService, walletService, rules, transactionManager, relay);
         lifecycle = new OrderLifecycleServiceImpl(orderMapper, evaluationMapper, userService,

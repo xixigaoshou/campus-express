@@ -19,8 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,7 +49,8 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
     /**
      * 定时任务：待收货超时自动确认收货（每 60 秒扫描一次，@EnableScheduling 启用）
      * 规则：接单者确认送达后 confirmReceiptHours（默认 24 小时）内需求方未确认 → 系统自动确认收货，报酬结算给接单者
-     * 说明：不加 @Transactional，每单在独立事务中处理，单笔结算异常不影响其余订单
+     * 说明：不加 @Transactional，每单在独立事务中处理，单笔结算异常不影响其余订单；
+     * 结算失败的单整单回滚（保持「待收货」），下一轮扫描自动重试，不会出现「已完成但未结算」
      */
     @Override
     @Scheduled(fixedDelay = 60_000)
@@ -83,11 +82,19 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
         historyService.saveHistoryRecord(OrderDomainSupport.buildHistory(o.getOrderId(), OrderStatus.WAIT_CONFIRM,
                 OrderStatus.COMPLETED, o.getPublisherId(), "需求方超时未确认收货，系统自动确认（"
                 + rules.getTimeout().getConfirmReceiptHours() + "小时）"));
-        // R-28：定时自动确认收货同样触发资金结算；历史/异常订单可能无冻结余额，结算失败不阻塞订单完成
+        // R-28：结算与订单完成必须「同成同败」。
+        // 若吞掉结算异常继续提交，会出现「订单已完成、报酬既没扣冻结也没入账」的账实不符：
+        // 接单者拿不到钱、发布者冻结资金永久卡住，而且订单已进入终态，再也没有任何路径会重试。
+        // 这里让异常向上抛出，由 runPerOrderTx 的 REQUIRES_NEW 事务整体回滚（状态/历史一并回滚），
+        // 订单保持「待收货」，下一轮扫描自动重试，直到结算成功为止。
         try {
             walletService.settleOrderReward(o.getPublisherId(), o.getTakerId(), o.getOrderId(), o.getRewardAmount());
         } catch (BusinessException e) {
-            log.warn("[自动确认收货] 订单#{} 结算失败（{}），订单已完成但报酬未结算", o.getOrderId(), e.getMessage());
+            // 内存对象同步回滚，避免调用方误以为本单已完成
+            o.setStatus(OrderStatus.WAIT_CONFIRM);
+            log.error("[自动确认收货] 订单#{} 结算失败，已回滚本次自动确认，订单保持待收货等待下一轮重试：{}",
+                    o.getOrderId(), e.getMessage());
+            throw e;
         }
         notificationService.send(o.getPublisherId(), o.getOrderId(), "订单已自动确认收货，报酬已结算给接单者，请及时评价");
         notificationService.send(o.getTakerId(), o.getOrderId(), "订单已自动确认收货，报酬已到账，请及时评价");
@@ -141,13 +148,7 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
      * 也不会中断后续订单——否则某单反复失败会让整批任务永久卡死
      */
     private void runPerOrderTx(Integer orderId, String scene, Runnable action) {
-        TransactionTemplate template = new TransactionTemplate(transactionManager);
-        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        try {
-            template.executeWithoutResult(status -> action.run());
-        } catch (Exception e) {
-            log.error("[{}] 订单#{} 处理失败，已跳过该单（不影响其余订单）：{}", scene, orderId, e.getMessage(), e);
-        }
+        OrderDomainSupport.runPerOrderTx(transactionManager, orderId, scene, action);
     }
 
     /**
@@ -188,13 +189,23 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
             runPerOrderTx(o.getOrderId(), "超时提醒/取消-未取件", () -> handleStuckAcceptedOrder(o));
         }
 
-        // ③ 取件中/配送中长时间未送达（R-15 扩展）：超过期望取件时间 pickingOverdueHours 小时仍未送达
+        // ③ 取件中/配送中长时间未送达（R-15 扩展）：超过「取件时间」pickingOverdueHours 小时仍未送达
         // 包裹已在接单者手中，无法退回待接单，故订单置为终态「已取消」、扣接单者信誉分、解冻发布者报酬
+        // 计时基准：优先取 pickup_time（已接单 → 取件中时记录）；历史订单无该字段时退回期望取件时间。
+        // 不能只用期望取件时间：用户晚于期望时间取件时，取件后很快（甚至立刻）就会撞上
+        // 「期望时间 + N 小时」而被误判超时取消
+        LocalDateTime deliverDeadline = now.minusHours(rules.getTimeout().getPickingOverdueHours());
         List<Order> overdueDeliver = orderMapper.selectList(new LambdaQueryWrapper<Order>()
                 .in(Order::getStatus, List.of(OrderStatus.PICKING, OrderStatus.DELIVERING))
-                .isNotNull(Order::getExpectTime)
-                .lt(Order::getExpectTime, now.minusHours(rules.getTimeout().getPickingOverdueHours())));
+                .and(w -> w.lt(Order::getPickupTime, deliverDeadline)
+                        .or(x -> x.isNull(Order::getPickupTime)
+                                .isNotNull(Order::getExpectTime)
+                                .lt(Order::getExpectTime, deliverDeadline))));
         for (Order o : overdueDeliver) {
+            // 内存兜底：防止查询与处理之间订单刚被接单者推进（取件时间被刷新）而误取消
+            if (o.getPickupTime() != null && !isDeliverOverdue(o, now)) {
+                continue;
+            }
             runPerOrderTx(o.getOrderId(), "超时提醒/取消-未送达", () -> handleOverdueDeliveryOrder(o));
         }
 
@@ -237,6 +248,14 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
         notificationService.send(o.getTakerId(), o.getOrderId(),
                 "订单#" + o.getOrderId() + " 因超过期望取件时间未取件，已被系统退回待接单，已扣信誉分5"
                         + (TransferStatus.PENDING.equals(o.getTransferStatus()) ? "；您发起的转单接力已随之失效" : ""));
+    }
+
+    /**
+     * 判断取件后是否已超过送达时限：以取件时间为准，缺失时退回期望取件时间（兼容历史订单）
+     */
+    private boolean isDeliverOverdue(Order o, LocalDateTime now) {
+        LocalDateTime base = o.getPickupTime() != null ? o.getPickupTime() : o.getExpectTime();
+        return base != null && base.isBefore(now.minusHours(rules.getTimeout().getPickingOverdueHours()));
     }
 
     /**

@@ -16,6 +16,7 @@ import com.campus.express.service.NotificationService;
 import com.campus.express.service.UserService;
 import com.campus.express.vo.EvaluationVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -93,7 +94,14 @@ public class EvaluationServiceImpl implements EvaluationService {
         evaluation.setEvaluateeId(evaluateeId);
         evaluation.setStarLevel(dto.getStarLevel());
         evaluation.setContent(dto.getContent());
-        evaluationMapper.insert(evaluation);
+        try {
+            evaluationMapper.insert(evaluation);
+        } catch (DuplicateKeyException e) {
+            // 上面的「是否已评价」查询与插入之间存在并发窗口；
+            // 数据库唯一键 uk_order_evaluator(order_id, evaluator_id) 是最终防线，
+            // 冲突时按「重复评价」拒绝，绝不能继续加分（否则可刷信誉分）
+            throw new BusinessException("您已评价过该订单，不能重复评价");
+        }
 
         // ⑤ 信誉分变更（R-22）：星级 >= goodStar(4) 好评 +goodAdd(1) 分；<= badStar(3) 差评 -badDeduct(2) 分
         int delta = dto.getStarLevel() >= rules.getCredit().getGoodStar()

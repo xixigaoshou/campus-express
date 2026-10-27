@@ -20,6 +20,7 @@
                o.create_time,
                o.update_time,
                o.confirm_arrival_time,
+               o.pickup_time,
                o.cancel_reason,
                o.pickup_photo,
                o.deliver_photo,
@@ -53,6 +54,7 @@
                o.create_time,
                o.update_time,
                o.confirm_arrival_time,
+               o.pickup_time,
                o.cancel_reason,
                o.transfer_status,
                o.transfer_reason,
@@ -81,6 +83,7 @@
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
         <result column="confirm_arrival_time" property="confirmArrivalTime"/>
+        <result column="pickup_time" property="pickupTime"/>
         <result column="cancel_reason" property="cancelReason"/>
         <result column="pickup_photo" property="pickupPhoto"/>
         <result column="deliver_photo" property="deliverPhoto"/>
@@ -162,7 +165,8 @@
             status   = '已接单',
             version  = version + 1,
             update_time = NOW(),
-            cancel_reason = NULL
+            cancel_reason = NULL,
+            pickup_time = NULL
         WHERE order_id = #{orderId}
           AND status = '待接单'
           AND version = #{version}

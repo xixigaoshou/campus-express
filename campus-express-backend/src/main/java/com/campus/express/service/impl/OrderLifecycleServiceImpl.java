@@ -348,21 +348,30 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
                 throw new BusinessException("请选择有效的取消原因（接单者原因清单）");
             }
             String fromStatus = order.getStatus();
-            // R-12：接单后取消属违约，扣信誉分 5 分（同时写流水明细）
+            // 订单退回待接单：更新带「原状态 + version」双重守卫。
+            // 同一时刻定时任务（超时未取件 / 取件后超时未送达）可能已经把订单推进或取消，
+            // 若此处只按 order_id 更新，会覆盖定时任务的结果，并在订单已被处理后再扣一次违约分
+            // （一次违约扣两次分、写两条历史），故必须带守卫并且在更新成功后才扣分。
+            // 注意：updateById 默认不更新 null 字段，须用 UpdateWrapper 显式置空 taker_id
+            int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                    .eq(Order::getOrderId, orderId)
+                    .eq(Order::getVersion, order.getVersion())
+                    .in(Order::getStatus, List.of(OrderStatus.ACCEPTED, OrderStatus.PICKING))
+                    .set(Order::getStatus, OrderStatus.WAIT_ACCEPT)
+                    .set(Order::getCancelReason, cancelReason)
+                    .set(Order::getTakerId, null)
+                    .set(Order::getUpdateTime, LocalDateTime.now())
+                    .set(Order::getVersion, order.getVersion() + 1));
+            if (rows == 0) {
+                throw new BusinessException("订单状态已变更，请刷新后重试");
+            }
+            // R-12：接单后取消属违约，扣信誉分 5 分（同时写流水明细）。
+            // 放在状态流转成功之后：与退回待接单同成同败，避免「分已扣、订单却没退回去」
             userService.updateCreditScore(current.getUserId(),
                     -rules.getCredit().getBreachDeduct(),
                     "接单者取消",
                     "接单者取消订单（订单#" + orderId + "，" + cancelReason + "），违约扣信誉分5",
                     orderId);
-            // 订单退回待接单，重新开放给其他接单者
-            // 清空接单者：订单重新开放后原接单者不再持有该单（避免幻影 taker 撑大并发单数）
-            // 注意：updateById 默认不更新 null 字段，须用 UpdateWrapper 显式置空 taker_id
-            orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                    .eq(Order::getOrderId, orderId)
-                    .set(Order::getStatus, OrderStatus.WAIT_ACCEPT)
-                    .set(Order::getCancelReason, cancelReason)
-                    .set(Order::getTakerId, null)
-                    .set(Order::getUpdateTime, LocalDateTime.now()));
             historyService.saveHistoryRecord(OrderDomainSupport.buildHistory(orderId, fromStatus,
                     OrderStatus.WAIT_ACCEPT, current.getUserId(), "接单者取消（" + cancelReason + "），扣信誉分5，退回待接单"));
             // 报酬保持冻结：订单仍处待接单、未最终取消，冻结资金继续为该单服务（与定时任务②超时自动取消行为一致），
@@ -471,6 +480,12 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
             throw new BusinessException(403, "订单状态更新仅限接单者操作");
         }
 
+        // 已接单 → 取件中：记录取件时间，作为「取件后送达超时」的起算点。
+        // 不能用期望取件时间起算：用户晚于期望时间取件时，会在取件后不久就被判超时
+        if (OrderStatus.PICKING.equals(targetStatus)) {
+            order.setPickupTime(LocalDateTime.now());
+        }
+
         // 配送中 → 待收货：默认要求上传送达照片，无法拍照时可显式 skipPhoto 跳过，并记录确认送达时间
         if (OrderStatus.WAIT_CONFIRM.equals(targetStatus)) {
             checkDeliverPhoto(order, skipPhoto);
@@ -526,11 +541,21 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
         if (!operatorId.equals(order.getTakerId())) {
             throw new BusinessException(403, "仅接单者可确认送达");
         }
+        // 转单接力中：订单已挂到接力专区，接单者不可再推进履约（与 updateOrderStatus 保持一致），
+        // 否则会出现「待收货 + 待接力」的混合状态，接力专区却因状态不符而无法承接
+        if (TransferStatus.PENDING.equals(order.getTransferStatus())) {
+            throw new BusinessException("订单正在转单接力中，请先撤回转单或等待接力完成");
+        }
         // 默认要求送达照片：无法拍照时须显式 skipPhoto 跳过（「无法拍照」入口）
         checkDeliverPhoto(order, skipPhoto);
         order.setStatus(OrderStatus.WAIT_CONFIRM);
         order.setConfirmArrivalTime(LocalDateTime.now());
-        orderMapper.updateById(order);
+        // 乐观锁：返回 0 说明订单已被并发修改（典型场景：定时任务已按超时把订单取消）。
+        // 必须终止，否则会继续写「配送中 → 待收货」历史并通知发布者「已送达」，
+        // 与实际已取消的订单状态相互矛盾
+        if (orderMapper.updateById(order) == 0) {
+            throw new BusinessException("订单状态已变更，请刷新后重试");
+        }
         String note = order.getDeliverPhoto() != null
                 ? "接单者确认送达（已上传送达凭证），等待需求方确认收货"
                 : "接单者确认送达（无法拍照，已跳过凭证），等待需求方确认收货";

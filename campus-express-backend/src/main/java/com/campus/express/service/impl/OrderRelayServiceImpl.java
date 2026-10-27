@@ -25,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -52,6 +53,7 @@ public class OrderRelayServiceImpl implements OrderRelayService {
     private final NotificationService notificationService;
     private final WebSocketSessionManager webSocketSessionManager;
     private final BusinessRulesConfig rules;
+    private final PlatformTransactionManager transactionManager;
 
     /**
      * 发起转单接力：接单者取件前无法继续履约时，把订单挂到接力专区等待其他接单者接力
@@ -95,12 +97,20 @@ public class OrderRelayServiceImpl implements OrderRelayService {
         if (!TransferReason.isValid(reason)) {
             throw new BusinessException("请选择有效的转单原因");
         }
-        // 挂起接力：订单状态不变，仅打上接力标记等待他人承接
-        orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+        // 挂起接力：订单状态不变，仅打上接力标记等待他人承接。
+        // 更新带「原状态 + version」守卫：与接单者取消、超时任务并发时，
+        // 若订单已被推进/取消，影响行数为 0，必须终止，否则会给已结束的订单挂上一个永远撤不掉的接力标记
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getOrderId, orderId)
+                .eq(Order::getVersion, order.getVersion())
+                .in(Order::getStatus, List.of(OrderStatus.ACCEPTED, OrderStatus.PICKING))
                 .set(Order::getTransferStatus, TransferStatus.PENDING)
                 .set(Order::getTransferReason, reason)
-                .set(Order::getUpdateTime, LocalDateTime.now()));
+                .set(Order::getUpdateTime, LocalDateTime.now())
+                .set(Order::getVersion, order.getVersion() + 1));
+        if (rows == 0) {
+            throw new BusinessException("订单状态已变更，请刷新后重试");
+        }
         // 写入转单流水，供追溯与并发控制
         OrderTransfer t = new OrderTransfer();
         t.setOrderId(orderId);
@@ -242,32 +252,45 @@ public class OrderRelayServiceImpl implements OrderRelayService {
      */
     @Override
     @Scheduled(fixedDelay = 60_000)
-    @Transactional
     public void relayTimeoutTask() {
         LocalDateTime now = LocalDateTime.now();
         List<Order> pending = orderMapper.selectList(new LambdaQueryWrapper<Order>()
                 .eq(Order::getTransferStatus, TransferStatus.PENDING)
                 .lt(Order::getUpdateTime, now.minusMinutes(rules.getRelay().getTimeoutMinutes())));
+        // 不加方法级 @Transactional：批量事务会让单笔异常回滚整批、并让失败订单每轮都卡住后续订单。
+        // 与超时任务保持一致，按单开 REQUIRES_NEW 独立事务
         for (Order o : pending) {
-            orderMapper.update(null, new LambdaUpdateWrapper<Order>()
-                    .eq(Order::getOrderId, o.getOrderId())
-                    .eq(Order::getTransferStatus, TransferStatus.PENDING)
-                    .set(Order::getTransferStatus, null)
-                    .set(Order::getTransferReason, null)
-                    .set(Order::getUpdateTime, LocalDateTime.now()));
-            closeActiveTransfer(o.getOrderId(), TransferStatus.EXPIRED);
-            historyService.saveHistoryRecord(OrderDomainSupport.buildHistory(o.getOrderId(), o.getStatus(), o.getStatus(),
-                    o.getTakerId(), "转单接力超时无人接力，自动撤回（"
-                    + rules.getRelay().getTimeoutMinutes() + "分钟）"));
-            notificationService.send(o.getTakerId(), o.getOrderId(),
-                    "您的转单接力已超时无人接力，已自动撤回，请继续履约或取消订单");
-            notificationService.send(o.getPublisherId(), o.getOrderId(),
-                    "订单#" + o.getOrderId() + " 转单接力超时已自动撤回，原接单者将继续履约");
-            webSocketSessionManager.broadcast("new_relay");
+            OrderDomainSupport.runPerOrderTx(transactionManager, o.getOrderId(),
+                    "转单接力超时撤回", () -> handleRelayTimeoutOne(o));
         }
         if (!pending.isEmpty()) {
             log.info("[转单接力] 超时自动撤回 {} 单", pending.size());
         }
+    }
+
+    /**
+     * 单笔接力超时撤回：带 transfer_status 守卫清除接力标记；影响行数为 0 说明订单已被接力/撤回/取消，
+     * 直接跳过，避免重复写「超时撤回」历史与通知
+     */
+    private void handleRelayTimeoutOne(Order o) {
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+                .eq(Order::getOrderId, o.getOrderId())
+                .eq(Order::getTransferStatus, TransferStatus.PENDING)
+                .set(Order::getTransferStatus, null)
+                .set(Order::getTransferReason, null)
+                .set(Order::getUpdateTime, LocalDateTime.now()));
+        if (rows == 0) {
+            return;
+        }
+        closeActiveTransfer(o.getOrderId(), TransferStatus.EXPIRED);
+        historyService.saveHistoryRecord(OrderDomainSupport.buildHistory(o.getOrderId(), o.getStatus(), o.getStatus(),
+                o.getTakerId(), "转单接力超时无人接力，自动撤回（"
+                + rules.getRelay().getTimeoutMinutes() + "分钟）"));
+        notificationService.send(o.getTakerId(), o.getOrderId(),
+                "您的转单接力已超时无人接力，已自动撤回，请继续履约或取消订单");
+        notificationService.send(o.getPublisherId(), o.getOrderId(),
+                "订单#" + o.getOrderId() + " 转单接力超时已自动撤回，原接单者将继续履约");
+        webSocketSessionManager.broadcast("new_relay");
     }
 
     /** 本周一 00:00（自然周起点，用于统计本周转单接力次数） */

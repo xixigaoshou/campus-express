@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -256,5 +257,42 @@ class OrderServiceImplTakeAndStatusTest extends AbstractOrderServiceTest {
 
         verify(orderMapper).updateById(any(Order.class));
         assertEquals(OrderStatus.WAIT_CONFIRM, o.getStatus());
+    }
+
+    @Test
+    @DisplayName("确认送达：并发下 updateById 返回 0（订单已被定时任务取消）→ 抛异常，不写历史、不通知")
+    void confirmArrivalLosesRace() {
+        when(orderMapper.selectById(10)).thenReturn(order(10, OrderStatus.DELIVERING, 1, 2));
+        when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+        when(orderMapper.updateById(any(Order.class))).thenReturn(0);
+
+        assertThrows(BusinessException.class, () -> service.confirmArrival(10, true));
+
+        verify(historyService, never()).saveHistoryRecord(any());
+        verify(notificationService, never()).send(any(), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("确认送达：转单接力中不可推进（避免出现待收货+待接力的混合状态）")
+    void confirmArrivalRejectedWhileRelaying() {
+        Order o = order(10, OrderStatus.DELIVERING, 1, 2);
+        o.setTransferStatus(TransferStatus.PENDING);
+        when(orderMapper.selectById(10)).thenReturn(o);
+        when(userService.getCurrentUser()).thenReturn(user(2, "接单者", 100, false));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.confirmArrival(10, true));
+        assertTrue(ex.getMessage().contains("转单接力"));
+    }
+
+    @Test
+    @DisplayName("状态流转：进入取件中时记录取件时间（取件后超时的计时起点）")
+    void pickingRecordsPickupTime() {
+        Order o = order(10, OrderStatus.ACCEPTED, 1, 2);
+        when(orderMapper.selectById(10)).thenReturn(o);
+        when(orderMapper.updateById(any(Order.class))).thenReturn(1);
+
+        service.updateOrderStatus(10, OrderStatus.PICKING, 2, "已取件", false);
+
+        assertNotNull(o.getPickupTime());
     }
 }

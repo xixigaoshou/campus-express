@@ -23,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -119,11 +120,18 @@ class OrderMainChainIntegrationTest {
         assertEquals("待收货", orderStatus(orderId), "确认送达后应为待收货");
 
         // ⑥ 需求方确认收货（待收货 → 已完成，触发结算）
+        // 先把 update_time 改成很久以前，验证完成时自动填充确实把它刷新（评价有效期依赖该时间）
+        jdbc.update("UPDATE t_order SET update_time = '2020-01-01 00:00:00' WHERE order_id = ?", orderId);
         mockMvc.perform(put("/api/order/confirm-finish").param("orderId", String.valueOf(orderId))
                         .header("Authorization", "Bearer " + publisherToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200));
         assertEquals("已完成", orderStatus(orderId), "确认收货后应为已完成");
+        LocalDateTime finishedAt = jdbc.queryForObject(
+                "SELECT update_time FROM t_order WHERE order_id = ?", LocalDateTime.class, orderId);
+        assertNotNull(finishedAt);
+        assertTrue(finishedAt.isAfter(LocalDateTime.of(2020, 1, 1, 0, 0)),
+                "完成时 update_time 必须被刷新，否则评价有效期会算错");
 
         // 资金闭环断言：发布者冻结释放（0），接单者入账（50+8=58.00）
         assertEquals("0.00", publisherFrozen(), "完成后发布者冻结应清零");
