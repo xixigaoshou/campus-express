@@ -9,11 +9,16 @@ MySQL 容器首次启动时自动执行的建库建表脚本（按文件名顺�
 | `03_credit_log.sql` | `project_init/sql/06_信誉分明细表.sql` | 信誉分流水表 `t_credit_log` |
 | `04_user_avatar.sql` | `project_init/sql/07_用户头像字段.sql` | `t_user.avatar` 头像字段 |
 | `05_pay_password.sql` | `project_init/sql/11_支付密码字段.sql` | `t_user.pay_password_hash` 支付密码字段 |
+| `06_pickup_time.sql` | `project_init/sql/13_取件时间字段.sql` | `t_order.pickup_time` 取件时间字段（取件后送达超时的计时起点），并回填历史订单 |
+| `07_evaluation_unique.sql` | `project_init/sql/14_评价唯一约束.sql` | `t_evaluation` 唯一索引 `uk_order_evaluator`（订单 + 评价者），防止并发重复评价刷分 |
 
 说明：`project_init/sql/schema.sql` 是「当前基线表结构」，但未包含后续增量脚本新增的通知表、信誉流水表、头像与支付密码字段。
 这里按依赖顺序把它们拼成一套完整的容器初始化脚本，保证 `docker compose up` 后库结构与代码一致。
 
 > 取件码并发唯一约束（生成列 `t_order.active_pickup_key` + 唯一索引 `uk_active_pickup`）已并入 `01_schema.sql` 基线，
 > 无需单独的容器初始化脚本；**已有数据库**升级请执行 `project_init/sql/12_取件码并发唯一.sql`。
+>
+> `06_pickup_time.sql` / `07_evaluation_unique.sql` 与 01 基线中的对应定义重复，保留是为了让**已有数据库**也能幂等升级；
+> 重复执行不会报错（列/索引已存在时跳过）。
 
 本目录内容为上述脚本的副本，改动表结构时请同步更新对应源脚本。
