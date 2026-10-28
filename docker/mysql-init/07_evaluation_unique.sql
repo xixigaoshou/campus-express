@@ -4,6 +4,8 @@
 -- 注意：历史重复评价已产生的多余信誉分不会自动回滚
 -- ============================================================
 
+USE campus_express;
+
 DELETE e1
 FROM t_evaluation e1
 JOIN t_evaluation e2

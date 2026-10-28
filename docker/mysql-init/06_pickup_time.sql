@@ -3,6 +3,8 @@
 -- 用于「取件后超时未送达」的计时基准；幂等，可重复执行
 -- ============================================================
 
+USE campus_express;
+
 SET @col_exists := (
   SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE()
