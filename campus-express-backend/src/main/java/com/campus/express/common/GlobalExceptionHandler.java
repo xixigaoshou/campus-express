@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,6 +59,29 @@ public class GlobalExceptionHandler {
                 .map(ConstraintViolation::getMessage)
                 .findFirst()
                 .orElse("参数校验失败");
+        return Result.error(400, msg);
+    }
+
+    /**
+     * 唯一索引冲突：注册/改手机号/评价等「先查后插」在并发下仍可能撞库，
+     * 由数据库唯一索引兜底后在此转成可读的 400，而不是落到兜底分支变成 500
+     */
+    @ExceptionHandler(DuplicateKeyException.class)
+    public Result<Void> handleDuplicateKey(DuplicateKeyException e) {
+        String raw = String.valueOf(e.getMessage());
+        String msg;
+        if (raw.contains("uk_student_no")) {
+            msg = "该学号已注册，请直接登录";
+        } else if (raw.contains("uk_phone")) {
+            msg = "该手机号已被注册";
+        } else if (raw.contains("uk_order_evaluator")) {
+            msg = "您已评价过该订单";
+        } else if (raw.contains("uk_active_pickup")) {
+            msg = "该取件码在取件地点已被使用，请更换取件码";
+        } else {
+            msg = "数据已存在，请勿重复提交";
+        }
+        log.warn("[唯一约束冲突] {}", msg);
         return Result.error(400, msg);
     }
 

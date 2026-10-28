@@ -198,6 +198,8 @@ class OrderServiceImplCancelAndTransferTest extends AbstractOrderServiceTest {
 
         service.initiateTransfer(10, VALID_REASON);
 
+        // 每周次数是「先查后插」，必须先锁定用户行，避免并发突破上限
+        verify(userService).lockForUpdate(2);
         verify(transferMapper).insert(any(OrderTransfer.class));
         verify(historyService).saveHistoryRecord(any());
         verify(notificationService).send(eq(1), eq(10), anyString());

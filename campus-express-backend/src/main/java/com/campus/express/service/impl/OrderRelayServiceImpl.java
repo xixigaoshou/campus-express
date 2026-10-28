@@ -76,6 +76,9 @@ public class OrderRelayServiceImpl implements OrderRelayService {
         if (current.getCreditScore() < minCredit) {
             throw new BusinessException("信誉分低于 " + minCredit + "，暂无转单接力权限，请先提升信誉分");
         }
+        // 先锁定当前用户行：每周次数是「先查后插」，不串行化时同一用户多标签并发可突破上限
+        // 加锁顺序与抢单/接力承接一致（用户 → 订单），不会与订单行锁交叉成环
+        userService.lockForUpdate(current.getUserId());
         // 转单权限：每周次数上限（自然周，周一 00:00 重置；含已撤回/已过期的发起记录）
         int weeklyLimit = rules.getRelay().getWeeklyLimit();
         Long weeklyCount = transferMapper.selectCount(new LambdaQueryWrapper<OrderTransfer>()
