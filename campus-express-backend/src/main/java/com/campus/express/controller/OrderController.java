@@ -14,6 +14,8 @@ import com.campus.express.vo.OrderReuseVO;
 import com.campus.express.vo.OrderVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -176,8 +178,9 @@ public class OrderController {
      */
     @GetMapping("/relay-page")
     public Result<IPage<OrderVO>> relayPage(
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) java.math.BigDecimal minReward,
             @RequestParam(required = false) java.math.BigDecimal maxReward) {
@@ -207,8 +210,9 @@ public class OrderController {
      */
     @GetMapping("/hall-page")
     public Result<IPage<OrderVO>> hallPage(
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) java.math.BigDecimal minReward,
             @RequestParam(required = false) java.math.BigDecimal maxReward) {
@@ -222,8 +226,9 @@ public class OrderController {
      */
     @GetMapping("/my-publish-page")
     public Result<IPage<OrderVO>> myPublishPage(
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize,
             @RequestParam(required = false) List<String> statusList) {
         return Result.success(orderService.getMyPublishPage(pageNum, pageSize, statusList));
     }
@@ -235,8 +240,9 @@ public class OrderController {
      */
     @GetMapping("/my-take-page")
     public Result<IPage<OrderVO>> myTakePage(
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize,
             @RequestParam(required = false) List<String> statusList) {
         return Result.success(orderService.getMyTakePage(pageNum, pageSize, statusList));
     }

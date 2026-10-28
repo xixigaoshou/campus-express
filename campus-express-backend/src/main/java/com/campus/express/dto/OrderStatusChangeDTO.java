@@ -2,6 +2,7 @@ package com.campus.express.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -18,6 +19,7 @@ public class OrderStatusChangeDTO {
     private String targetStatus;
 
     /** 变更说明 */
+    @Size(max = 200, message = "变更说明不能超过 200 个字符")
     private String changeNote;
 
     /** 无法拍照跳过标记：流转到「待收货」时未上传送达照片，需显式置 true 才允许继续（默认 false） */

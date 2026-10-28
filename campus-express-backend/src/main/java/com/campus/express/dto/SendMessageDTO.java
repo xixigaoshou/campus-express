@@ -2,6 +2,7 @@ package com.campus.express.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -15,5 +16,6 @@ public class SendMessageDTO {
 
     /** 留言内容（Service 内做敏感词过滤） */
     @NotBlank(message = "留言内容不能为空")
+    @Size(max = 1000, message = "留言内容不能超过 1000 字")
     private String content;
 }

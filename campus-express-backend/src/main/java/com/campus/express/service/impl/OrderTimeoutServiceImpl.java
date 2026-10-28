@@ -221,6 +221,9 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
      * 避免把已推进的订单错误打回「待接单」并误扣信誉分（改由任务③按正确路径处理）
      */
     private void handleStuckAcceptedOrder(Order o) {
+        // 先锁定接单者用户行，统一「用户 → 订单 → 钱包」加锁顺序，
+        // 避免与抢单/接力承接的加锁顺序相反造成死锁
+        userService.lockForUpdate(o.getTakerId());
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getOrderId, o.getOrderId())
                 .eq(Order::getStatus, OrderStatus.ACCEPTED)
@@ -229,6 +232,9 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
                 .set(Order::getCancelReason, "超过期望取件时间未取件，自动取消")
                 .set(Order::getTransferStatus, null)
                 .set(Order::getTransferReason, null)
+                // 退回待接单后由下一位接单者重新取证：清空上一任的凭证，避免照片错配
+                .set(Order::getPickupPhoto, null)
+                .set(Order::getDeliverPhoto, null)
                 .set(Order::getUpdateTime, LocalDateTime.now())
                 .set(Order::getVersion, o.getVersion() + 1));
         if (rows == 0) {
@@ -263,6 +269,9 @@ public class OrderTimeoutServiceImpl implements OrderTimeoutService {
      * 原状态守卫：订单可能已被接单者推进或取消，影响行数为 0 时跳过，避免重复扣分与错误的终态覆盖
      */
     private void handleOverdueDeliveryOrder(Order o) {
+        // 先锁定接单者用户行，统一「用户 → 订单 → 钱包」加锁顺序，
+        // 避免与抢单/接力承接的加锁顺序相反造成死锁
+        userService.lockForUpdate(o.getTakerId());
         int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getOrderId, o.getOrderId())
                 .eq(Order::getStatus, o.getStatus())

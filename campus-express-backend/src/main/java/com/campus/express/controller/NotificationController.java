@@ -6,6 +6,8 @@ import com.campus.express.entity.Notification;
 import com.campus.express.entity.User;
 import com.campus.express.service.NotificationService;
 import com.campus.express.service.UserService;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,8 +35,9 @@ public class NotificationController {
      */
     @GetMapping("/page")
     public Result<IPage<Notification>> page(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") int pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") int pageSize,
             @RequestParam(required = false) Integer isRead) {
         User user = userService.getCurrentUser();
         return Result.success(notificationService.pageByUser(user.getUserId(), pageNum, pageSize, isRead));

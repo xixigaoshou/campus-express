@@ -15,6 +15,8 @@ import com.campus.express.entity.User;
 import com.campus.express.service.UserService;
 import com.campus.express.vo.UserStatsVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -155,8 +157,9 @@ public class UserController {
      */
     @GetMapping("/credit-logs")
     public Result<IPage<CreditLog>> creditLogs(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") int pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") int pageSize) {
         return Result.success(userService.pageCreditLogs(pageNum, pageSize));
     }
 

@@ -3,6 +3,7 @@ package com.campus.express.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -21,5 +22,6 @@ public class EvaluationCreateDTO {
     private Integer starLevel;
 
     /** 文字评价内容 */
+    @Size(max = 500, message = "评价内容不能超过 500 字")
     private String content;
 }

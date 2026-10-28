@@ -7,6 +7,8 @@ import com.campus.express.service.MessageService;
 import com.campus.express.vo.ConversationVO;
 import com.campus.express.vo.MessageVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -49,8 +51,9 @@ public class MessageController {
     @GetMapping("/order-page/{orderId}")
     public Result<IPage<MessageVO>> orderPage(
             @PathVariable Integer orderId,
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "20") long pageSize) {
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "20") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize) {
         return Result.success(messageService.getOrderMessagePage(pageNum, pageSize, orderId));
     }
 

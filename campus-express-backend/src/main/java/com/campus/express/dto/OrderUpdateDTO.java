@@ -3,6 +3,7 @@ package com.campus.express.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -23,17 +24,21 @@ public class OrderUpdateDTO {
     private String pickupCode;
 
     /** 快递公司 */
+    @Size(max = 30, message = "快递公司不能超过 30 个字符")
     private String expressCompany;
 
     @NotBlank(message = "取件地点不能为空")
+    @Size(max = 100, message = "取件地点不能超过 100 个字符")
     private String pickupLocation;
 
     @NotBlank(message = "送达地点不能为空")
+    @Size(max = 100, message = "送达地点不能超过 100 个字符")
     private String deliverLocation;
 
     @NotNull(message = "期望取件时间不能为空")
     private LocalDateTime expectTime;
 
+    @Size(max = 500, message = "备注不能超过 500 个字符")
     private String remark;
 
     @NotNull(message = "报酬金额不能为空")

@@ -348,6 +348,9 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
                 throw new BusinessException("请选择有效的取消原因（接单者原因清单）");
             }
             String fromStatus = order.getStatus();
+            // 先锁定接单者用户行，统一「用户 → 订单 → 钱包」的加锁顺序，
+            // 避免与抢单/接力承接的「用户 → 订单」顺序相反造成死锁
+            userService.lockForUpdate(current.getUserId());
             // 订单退回待接单：更新带「原状态 + version」双重守卫。
             // 同一时刻定时任务（超时未取件 / 取件后超时未送达）可能已经把订单推进或取消，
             // 若此处只按 order_id 更新，会覆盖定时任务的结果，并在订单已被处理后再扣一次违约分
@@ -360,6 +363,11 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
                     .set(Order::getStatus, OrderStatus.WAIT_ACCEPT)
                     .set(Order::getCancelReason, cancelReason)
                     .set(Order::getTakerId, null)
+                    // 退回待接单后由下一位接单者重新取证：清空上一任的计时基准与凭证，避免照片/时间错配
+                    .set(Order::getPickupTime, null)
+                    .set(Order::getPickupPhoto, null)
+                    .set(Order::getDeliverPhoto, null)
+                    .set(Order::getConfirmArrivalTime, null)
                     .set(Order::getUpdateTime, LocalDateTime.now())
                     .set(Order::getVersion, order.getVersion() + 1));
             if (rows == 0) {
@@ -419,6 +427,9 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
                     + "，暂不可接单，请先提升信誉分");
         }
         // R-9：校验同时进行中订单数量不超过等级上限
+        // 先锁定当前用户行，把「计数 → 抢单」串行化：否则并发请求会各自读到上限前的数量，
+        // 全部通过校验后同时抢单成功，突破等级上限
+        userService.lockForUpdate(taker.getUserId());
         Long activeCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
                 .eq(Order::getTakerId, taker.getUserId())
                 .in(Order::getStatus, List.of(OrderStatus.ACTIVE)));

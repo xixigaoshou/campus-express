@@ -2,6 +2,7 @@ package com.campus.express.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -16,5 +17,6 @@ public class UpdateUserDTO {
     private String phone;
 
     /** 宿舍区域 */
+    @Size(max = 50, message = "宿舍区域不能超过 50 个字符")
     private String dormArea;
 }

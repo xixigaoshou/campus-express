@@ -82,7 +82,7 @@ public class WalletServiceImpl implements WalletService {
 
     /** 冻结公共逻辑：校验可用余额 → 原子扣可用增冻结 → 写冻结流水 */
     private void freeze(Integer userId, Integer orderId, BigDecimal amount, String remark) {
-        Wallet wallet = getOrCreateWallet(userId);
+        Wallet wallet = lockWallet(userId);
         // R-25：校验可用余额 ≥ 冻结金额
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new BusinessException("钱包可用余额不足（当前 ¥" + wallet.getBalance()
@@ -119,7 +119,7 @@ public class WalletServiceImpl implements WalletService {
         // 退款额以该订单净冻结额为上限，避免侵占该用户其他订单的冻结额
         BigDecimal refund = netFrozen == null ? amount : netFrozen.min(amount);
 
-        Wallet wallet = getOrCreateWallet(userId);
+        Wallet wallet = lockWallet(userId);
         if (walletMapper.unfreeze(userId, refund) == 0) {
             // 兜底：钱包总冻结额不足（理论上不应发生），若已为 0 则视为已解冻完成，静默返回
             if (wallet.getFrozenBalance().compareTo(BigDecimal.ZERO) == 0) {
@@ -168,6 +168,16 @@ public class WalletServiceImpl implements WalletService {
         if (settled > 0) {
             return;
         }
+        // 按 userId 升序锁定双方钱包：互为收发方的两笔结算并发时加锁顺序一致，避免互相持锁死锁
+        Wallet pubWallet;
+        Wallet takWallet;
+        if (publisherId <= takerId) {
+            pubWallet = lockWallet(publisherId);
+            takWallet = lockWallet(takerId);
+        } else {
+            takWallet = lockWallet(takerId);
+            pubWallet = lockWallet(publisherId);
+        }
         // 结算前对齐该订单冻结额：订单存续期间可能因「修改待接单订单报酬」部分解冻（adjustFrozenBalance），
         // 导致冻结余额与当前报酬不一致；此处按流水推算该订单净冻结额，不足报酬时补冻结差额，
         // 既避免结算时冻结不足失败，也避免多冻结的差额永久滞留在冻结余额中无法使用。
@@ -175,10 +185,11 @@ public class WalletServiceImpl implements WalletService {
         BigDecimal shortfall = rewardAmount.subtract(frozenForOrder);
         if (shortfall.signum() > 0) {
             freezeBalance(publisherId, orderId, shortfall);
+            // 补冻结改变了发布者余额，重读锁定行，保证支出流水前后值准确
+            pubWallet = lockWallet(publisherId);
         }
 
         // ① 扣发布者冻结余额（报酬支出）
-        Wallet pubWallet = getOrCreateWallet(publisherId);
         if (walletMapper.settlePayFrozen(publisherId, rewardAmount) == 0) {
             throw new BusinessException("发布者冻结余额不足，订单结算失败");
         }
@@ -195,7 +206,6 @@ public class WalletServiceImpl implements WalletService {
         walletLogMapper.insert(payLog);
 
         // ② 增加接单者可用余额（报酬收入）
-        Wallet takWallet = getOrCreateWallet(takerId);
         walletMapper.settleIncome(takerId, rewardAmount);
         WalletLog incomeLog = new WalletLog();
         incomeLog.setUserId(takerId);
@@ -214,7 +224,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public void recharge(Integer userId, BigDecimal amount) {
-        Wallet wallet = getOrCreateWallet(userId);
+        Wallet wallet = lockWallet(userId);
         walletMapper.recharge(userId, amount);
         WalletLog log = new WalletLog();
         log.setUserId(userId);
@@ -233,7 +243,7 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional
     public void withdraw(Integer userId, BigDecimal amount) {
-        Wallet wallet = getOrCreateWallet(userId);
+        Wallet wallet = lockWallet(userId);
         // 余额校验：可用余额不足直接拒绝（与冻结/结算一致的防超扣策略）
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new BusinessException("钱包可用余额不足（当前 ¥" + wallet.getBalance()
@@ -268,6 +278,18 @@ public class WalletServiceImpl implements WalletService {
             walletMapper.insert(wallet);
         }
         return wallet;
+    }
+
+    /**
+     * 事务内锁定钱包行（SELECT ... FOR UPDATE）
+     * 资金流水的前后余额来自锁定行：锁内余额不会被并发改动，
+     * 「流水变化量之和 = 实际余额变化」才成立，事后对账可信
+     */
+    private Wallet lockWallet(Integer userId) {
+        Wallet wallet = walletMapper.selectOne(new LambdaQueryWrapper<Wallet>()
+                .eq(Wallet::getUserId, userId)
+                .last("FOR UPDATE"));
+        return wallet != null ? wallet : getOrCreateWallet(userId);
     }
 
     /** 实体转 VO：logType code → 文本 */

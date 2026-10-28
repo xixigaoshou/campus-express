@@ -29,6 +29,14 @@
         LIMIT 1
     </select>
 
+    <!-- 事务内锁定用户行：保证信誉分「读取-更新-重读」期间不被并发修改，流水前后值才可信 -->
+    <select id="selectByIdForUpdate" resultMap="UserMap">
+        SELECT *
+        FROM t_user
+        WHERE user_id = #{userId}
+        FOR UPDATE
+    </select>
+
     <!-- 信誉分更新（R-22/R-23）：score + delta，结果以 [0, maxScore] 区间封顶/封底（与上限对称）。
          说明：原实现用 WHERE ... AND credit_score + #{delta} >= 0 把「扣分导致为负」变成更新失败，
          会让信誉分已接近 0 的接单者无法被扣分，进而使定时任务的超时处理整单失败。

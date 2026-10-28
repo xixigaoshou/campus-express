@@ -34,7 +34,7 @@ class UserServiceImplCreditStatsTest extends AbstractUserServiceTest {
     @Test
     @DisplayName("信誉分增减：用户不存在 → 拒绝")
     void updateCreditScoreRejectsUnknownUser() {
-        when(userMapper.selectById(1)).thenReturn(null);
+        when(userMapper.selectByIdForUpdate(1)).thenReturn(null);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.updateCreditScore(1, 1, "评价好评", "订单#1", 1));
@@ -44,7 +44,7 @@ class UserServiceImplCreditStatsTest extends AbstractUserServiceTest {
     @Test
     @DisplayName("信誉分增减：SQL 更新影响 0 行 → 拒绝且不写流水")
     void updateCreditScoreFailsWhenNoRowAffected() {
-        when(userMapper.selectById(1)).thenReturn(user(1, "张三", 100, 1));
+        when(userMapper.selectByIdForUpdate(1)).thenReturn(user(1, "张三", 100, 1));
         when(userMapper.updateCreditScore(1, 1, rules.getCredit().getMaxScore())).thenReturn(0);
 
         BusinessException ex = assertThrows(BusinessException.class,
@@ -56,9 +56,8 @@ class UserServiceImplCreditStatsTest extends AbstractUserServiceTest {
     @Test
     @DisplayName("信誉分增加：按实际增量写流水（含关联订单号）")
     void updateCreditScoreWritesLogWithActualDelta() {
-        when(userMapper.selectById(1))
-                .thenReturn(user(1, "张三", 100, 1))
-                .thenReturn(user(1, "张三", 101, 1));
+        when(userMapper.selectByIdForUpdate(1)).thenReturn(user(1, "张三", 100, 1));
+        when(userMapper.selectById(1)).thenReturn(user(1, "张三", 101, 1));
         when(userMapper.updateCreditScore(1, 1, rules.getCredit().getMaxScore())).thenReturn(1);
 
         service.updateCreditScore(1, 1, "评价好评", "订单#9", 9);
@@ -75,9 +74,8 @@ class UserServiceImplCreditStatsTest extends AbstractUserServiceTest {
     @Test
     @DisplayName("信誉分扣减：负增量如实写入流水")
     void updateCreditScoreWritesNegativeDelta() {
-        when(userMapper.selectById(1))
-                .thenReturn(user(1, "张三", 100, 1))
-                .thenReturn(user(1, "张三", 95, 1));
+        when(userMapper.selectByIdForUpdate(1)).thenReturn(user(1, "张三", 100, 1));
+        when(userMapper.selectById(1)).thenReturn(user(1, "张三", 95, 1));
         when(userMapper.updateCreditScore(1, -5, rules.getCredit().getMaxScore())).thenReturn(1);
 
         service.updateCreditScore(1, -5, "接单者取消", "订单#9", 9);
@@ -90,9 +88,8 @@ class UserServiceImplCreditStatsTest extends AbstractUserServiceTest {
     @Test
     @DisplayName("信誉分已达上限：封顶后实际增量为 0，不写流水（避免 +0 噪音）")
     void updateCreditScoreSkipsLogWhenCapped() {
-        when(userMapper.selectById(1))
-                .thenReturn(user(1, "张三", 150, 1))
-                .thenReturn(user(1, "张三", 150, 1));
+        when(userMapper.selectByIdForUpdate(1)).thenReturn(user(1, "张三", 150, 1));
+        when(userMapper.selectById(1)).thenReturn(user(1, "张三", 150, 1));
         when(userMapper.updateCreditScore(1, 1, rules.getCredit().getMaxScore())).thenReturn(1);
 
         service.updateCreditScore(1, 1, "评价好评", "订单#9", 9);

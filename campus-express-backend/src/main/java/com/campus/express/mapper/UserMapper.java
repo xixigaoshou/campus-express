@@ -19,6 +19,12 @@ public interface UserMapper extends BaseMapper<User> {
     User selectByLoginName(@Param("loginName") String loginName);
 
     /**
+     * 事务内锁定用户行（SELECT ... FOR UPDATE）
+     * 用于：信誉分流水「读取-更新-重读」期间禁止并发修改；抢单/接力的「计数 → 抢占」串行化
+     */
+    User selectByIdForUpdate(@Param("userId") Integer userId);
+
+    /**
      * 信誉分更新（规则 R-22/R-23 动态计算）
      * 乐观更新：score + delta 后必须仍 >= 0，避免负分；同时以 maxScore 封顶，达到上限后好评不再加分
      *

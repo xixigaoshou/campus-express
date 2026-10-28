@@ -142,11 +142,20 @@ public class OrderRelayServiceImpl implements OrderRelayService {
         if (!TransferStatus.PENDING.equals(order.getTransferStatus())) {
             throw new BusinessException("订单当前未处于转单接力中");
         }
-        orderMapper.update(null, new LambdaUpdateWrapper<Order>()
+        // 更新带「接力状态 + version」守卫：与接力承接、接力超时撤回并发时，
+        // 若订单已被他人承接或接力已被系统结束，影响行数为 0，必须终止，
+        // 否则会给已结束接力的订单写一条「已撤回、继续由本人履约」的假轨迹并通知发布者
+        int rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                 .eq(Order::getOrderId, orderId)
+                .eq(Order::getVersion, order.getVersion())
+                .eq(Order::getTransferStatus, TransferStatus.PENDING)
                 .set(Order::getTransferStatus, null)
                 .set(Order::getTransferReason, null)
-                .set(Order::getUpdateTime, LocalDateTime.now()));
+                .set(Order::getUpdateTime, LocalDateTime.now())
+                .set(Order::getVersion, order.getVersion() + 1));
+        if (rows == 0) {
+            throw new BusinessException("接力已结束（已被承接或已超时撤回），请刷新后重试");
+        }
         closeActiveTransfer(orderId, TransferStatus.WITHDRAWN);
         historyService.saveHistoryRecord(OrderDomainSupport.buildHistory(orderId, order.getStatus(), order.getStatus(),
                 current.getUserId(), "撤回转单接力，继续由本人履约"));
@@ -195,6 +204,8 @@ public class OrderRelayServiceImpl implements OrderRelayService {
                     + "，暂不可接单，请先提升信誉分");
         }
         // 同时进行中订单上限（R-9）
+        // 先锁定当前用户行，把「计数 → 接力」串行化，避免并发请求同时通过上限校验后超额接单
+        userService.lockForUpdate(taker.getUserId());
         Long activeCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
                 .eq(Order::getTakerId, taker.getUserId())
                 .in(Order::getStatus, List.of(OrderStatus.ACTIVE)));

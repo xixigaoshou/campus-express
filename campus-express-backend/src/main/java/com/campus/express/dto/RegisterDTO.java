@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -19,6 +20,7 @@ public class RegisterDTO {
 
     /** 用户姓名 */
     @NotBlank(message = "姓名不能为空")
+    @Size(max = 50, message = "姓名不能超过 50 个字符")
     private String username;
 
     /** 手机号，唯一 */
@@ -42,5 +44,6 @@ public class RegisterDTO {
     private Integer role;
 
     /** 宿舍区域 */
+    @Size(max = 50, message = "宿舍区域不能超过 50 个字符")
     private String dormArea;
 }

@@ -477,7 +477,9 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void updateCreditScore(Integer userId, int delta, String changeType, String remark, Integer relatedOrderId) {
-        User user = userMapper.selectById(userId);
+        // 锁定用户行：更新前后都在本事务锁内，并发扣分时 before/after 不会被其他事务穿插，
+        // 流水「变化量之和 = 实际分值变化」才成立
+        User user = userMapper.selectByIdForUpdate(userId);
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
@@ -617,6 +619,16 @@ public class UserServiceImpl implements UserService {
     @Override
     public User getById(Integer userId) {
         User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        return user;
+    }
+
+    /** 事务内锁定用户行（SELECT ... FOR UPDATE） */
+    @Override
+    public User lockForUpdate(Integer userId) {
+        User user = userMapper.selectByIdForUpdate(userId);
         if (user == null) {
             throw new BusinessException("用户不存在");
         }

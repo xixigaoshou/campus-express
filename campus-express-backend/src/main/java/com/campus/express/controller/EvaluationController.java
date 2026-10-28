@@ -6,6 +6,8 @@ import com.campus.express.dto.EvaluationCreateDTO;
 import com.campus.express.service.EvaluationService;
 import com.campus.express.vo.EvaluationVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -57,8 +59,9 @@ public class EvaluationController {
      */
     @GetMapping("/page")
     public Result<IPage<EvaluationVO>> page(
-            @RequestParam(defaultValue = "1") long pageNum,
-            @RequestParam(defaultValue = "10") long pageSize) {
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") long pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") long pageSize) {
         return Result.success(evaluationService.getEvaluationPage(pageNum, pageSize));
     }
 }

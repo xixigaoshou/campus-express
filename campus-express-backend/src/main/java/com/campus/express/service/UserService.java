@@ -48,6 +48,13 @@ public interface UserService {
     User getCurrentUser();
 
     /**
+     * 事务内锁定用户行（SELECT ... FOR UPDATE）
+     * 用途：信誉分流水「读取-更新-重读」期间禁止并发修改；抢单/接力的「计数 → 抢占」串行化
+     * 调用方须处于事务中，否则锁在自动提交模式下会立即释放
+     */
+    User lockForUpdate(Integer userId);
+
+    /**
      * 更新个人资料：仅允许改宿舍区域与手机号，学号不可修改
      */
     void updateUserInfo(UpdateUserDTO dto);

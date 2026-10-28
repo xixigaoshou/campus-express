@@ -166,7 +166,10 @@
             version  = version + 1,
             update_time = NOW(),
             cancel_reason = NULL,
-            pickup_time = NULL
+            pickup_time = NULL,
+            pickup_photo = NULL,
+            deliver_photo = NULL,
+            confirm_arrival_time = NULL
         WHERE order_id = #{orderId}
           AND status = '待接单'
           AND version = #{version}

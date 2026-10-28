@@ -9,6 +9,8 @@ import com.campus.express.service.WalletService;
 import com.campus.express.vo.WalletLogVO;
 import com.campus.express.vo.WalletVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,8 +50,9 @@ public class WalletController {
      */
     @GetMapping("/log/page")
     public Result<IPage<WalletLogVO>> logPage(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码不能小于 1") int pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页条数不能小于 1")
+            @Max(value = 100, message = "每页条数不能超过 100") int pageSize,
             @RequestParam(required = false) Integer logType) {
         return Result.success(walletService.pageWalletLogs(userService.getCurrentUser().getUserId(), pageNum, pageSize, logType));
     }
